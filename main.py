@@ -28,6 +28,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from fnaf_routes import fnaf_router, register_dependencies
+
 # ─── Optional imports (graceful fallback if not installed) ───────────────────
 
 try:
@@ -64,6 +66,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(fnaf_router)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -474,6 +478,12 @@ def rppg_monitor_thread(exp_id: str, loop: asyncio.AbstractEventLoop) -> None:
 
 # ─── API Endpoints ────────────────────────────────────────────────────────────
 
+@app.on_event("startup")
+async def startup_event():
+    """Register FNAF dependencies after the app is fully initialised."""
+    register_dependencies(_broadcast, sessions)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     with open("index.html") as fh:
@@ -841,6 +851,59 @@ async def websocket_session(websocket: WebSocket, exp_id: str):
 
             elif action == "ping":
                 await websocket.send_json({"pong": True, "timestamp": time.time()})
+
+            # ── FNAF actions ──────────────────────────────────────────────
+            elif action in (
+                "toggle_door", "toggle_light",
+                "camera_open", "camera_close", "switch_camera",
+                "check_pirate_cove",
+            ):
+                from fnaf_state import fnaf_sessions
+                from fnaf_ai import foxy_camera_check
+
+                fnaf = fnaf_sessions.get(exp_id)
+                if fnaf and fnaf.phase == "running":
+                    if action == "toggle_door":
+                        side = data.get("side", "left")
+                        if side == "left":
+                            fnaf.door_left = not fnaf.door_left
+                        else:
+                            fnaf.door_right = not fnaf.door_right
+                        await websocket.send_json({
+                            "type": "door_state",
+                            "side": side,
+                            "closed": fnaf.door_left if side == "left" else fnaf.door_right,
+                        })
+
+                    elif action == "toggle_light":
+                        side = data.get("side", "left")
+                        if side == "left":
+                            fnaf.light_left = not fnaf.light_left
+                        else:
+                            fnaf.light_right = not fnaf.light_right
+                        await websocket.send_json({
+                            "type": "light_state",
+                            "side": side,
+                            "on": fnaf.light_left if side == "left" else fnaf.light_right,
+                        })
+
+                    elif action == "camera_open":
+                        fnaf.camera_monitor_open = True
+
+                    elif action == "camera_close":
+                        fnaf.camera_monitor_open = False
+                        fnaf.active_camera = None
+
+                    elif action == "switch_camera":
+                        cam_id = data.get("cam_id")
+                        fnaf.active_camera = cam_id
+                        fnaf.camera_monitor_open = True
+
+                    elif action == "check_pirate_cove":
+                        foxy = fnaf.animatronics.get("foxy")
+                        if foxy:
+                            foxy_camera_check(foxy)
+                        fnaf.active_camera = "cam1C"
 
     except WebSocketDisconnect:
         print(f"[WS] Client disconnected from {exp_id}")
