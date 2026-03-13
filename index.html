@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NIGHTMARE ENGINE</title>
+  <script src="https://cdn.jsdelivr.net/npm/howler@2.2.4/dist/howler.min.js"></script>
+  <style>
+    :root {
+      --blood:   #cc0000;
+      --crimson: #ff2222;
+      --dim:     #550000;
+      --black:   #000000;
+      --grey:    #888888;
+      --white:   #dddddd;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--black);
+      color: var(--crimson);
+      font-family: 'Courier New', Courier, monospace;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 10px;
+      transition: background 0.8s ease;
+    }
+
+    h1 {
+      font-size: 1.1em;
+      letter-spacing: 0.3em;
+      text-align: center;
+      color: var(--blood);
+      border-bottom: 1px solid var(--dim);
+      padding-bottom: 8px;
+      flex-shrink: 0;
+    }
+
+    /* ── Status bar ── */
+    #status-bar {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      font-size: 0.85em;
+      color: var(--grey);
+      flex-shrink: 0;
+    }
+    #status-bar span { transition: color 0.4s; }
+    #status-bar .val { color: var(--crimson); }
+
+    /* ── Intensity bar ── */
+    #intensity-container {
+      flex-shrink: 0;
+    }
+    #intensity-label {
+      font-size: 0.8em;
+      color: var(--grey);
+      margin-bottom: 4px;
+    }
+    #intensity-track {
+      height: 12px;
+      background: #1a0000;
+      border: 1px solid var(--dim);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #intensity-fill {
+      height: 100%;
+      background: var(--blood);
+      width: 0%;
+      transition: width 1.5s ease, background 1s ease;
+    }
+    #intensity-fill.pulse {
+      animation: pulse-glow 1.5s infinite alternate;
+    }
+    @keyframes pulse-glow {
+      from { box-shadow: 0 0 4px var(--blood);  }
+      to   { box-shadow: 0 0 20px var(--crimson); }
+    }
+
+    /* ── Emotion badge ── */
+    #emotion-badge {
+      font-size: 0.85em;
+      font-weight: bold;
+      color: var(--grey);
+      flex-shrink: 0;
+      transition: color 0.4s;
+    }
+
+    /* ── Narrative scroll ── */
+    #narrative {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 0.95em;
+      line-height: 1.55;
+      color: var(--crimson);
+      border: 1px solid #1a0000;
+      padding: 10px 14px;
+      background: #050000;
+      border-radius: 2px;
+    }
+    #narrative p {
+      margin-bottom: 0.6em;
+      opacity: 0;
+      animation: fade-in 1.2s forwards;
+    }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    #narrative p.system  { color: var(--grey); font-size: 0.8em; }
+    #narrative p.alert   { color: #ff8800; }
+    #narrative p.fragment { color: var(--crimson); }
+
+    /* ── Controls ── */
+    #controls {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #0a0000;
+      border: 1px solid var(--dim);
+      color: var(--grey);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 0.85em;
+    }
+    button {
+      background: #200000;
+      border: 1px solid var(--blood);
+      color: var(--crimson);
+      padding: 6px 14px;
+      font-family: inherit;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: var(--dim); }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Session setup overlay ── */
+    #setup-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.97);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      z-index: 999;
+      padding: 20px;
+    }
+    #setup-overlay h2 {
+      letter-spacing: 0.4em;
+      color: var(--blood);
+      font-size: 1.4em;
+    }
+    #setup-overlay p {
+      color: var(--grey);
+      font-size: 0.85em;
+      text-align: center;
+      max-width: 440px;
+    }
+    #setup-overlay input, #setup-overlay select {
+      width: 340px;
+      background: #0a0000;
+      border: 1px solid var(--dim);
+      color: var(--white);
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.9em;
+    }
+    #start-btn {
+      width: 340px;
+      padding: 10px;
+      font-size: 1em;
+      letter-spacing: 0.2em;
+    }
+    #error-msg { color: #ff4444; font-size: 0.8em; min-height: 1em; }
+
+    /* ── Recursion depth indicator ── */
+    #recursion-dots {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+      justify-content: flex-end;
+    }
+    .rdot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #200000;
+      border: 1px solid var(--dim);
+      transition: background 0.5s, box-shadow 0.5s;
+    }
+    .rdot.active {
+      background: var(--crimson);
+      box-shadow: 0 0 6px var(--crimson);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Setup overlay ───────────────────────────────────────────────── -->
+<div id="setup-overlay">
+  <h2>NIGHTMARE ENGINE</h2>
+  <p>Enter a session ID to connect to an existing experience, or leave blank to auto-create one.</p>
+
+  <input id="exp-id-input" type="text" placeholder="exp_... (leave blank to create new)" />
+
+  <select id="fear-select">
+    <option value="existential">Existential dread</option>
+    <option value="claustrophobia">Claustrophobia</option>
+    <option value="social">Social horror</option>
+    <option value="cosmic">Cosmic horror</option>
+    <option value="predator">Predator / pursuit</option>
+    <option value="abandonment">Abandonment</option>
+    <option value="body_horror">Body horror</option>
+  </select>
+
+  <button id="start-btn">ENTER THE NIGHTMARE</button>
+  <div id="error-msg"></div>
+</div>
+
+<!-- ── Main UI ─────────────────────────────────────────────────────── -->
+<h1>☠ NIGHTMARE ENGINE ☠</h1>
+
+<div id="status-bar">
+  <span>HR: <span class="val" id="s-hr">—</span> bpm</span>
+  <span>GSR: <span class="val" id="s-gsr">—</span></span>
+  <span>Intensity: <span class="val" id="s-int">—</span></span>
+  <span>Recursion: <span class="val" id="s-rec">—</span></span>
+  <span id="s-session" style="margin-left:auto; color:#333; font-size:0.8em;"></span>
+</div>
+
+<div id="intensity-container">
+  <div id="intensity-label">FEAR INTENSITY</div>
+  <div id="intensity-track"><div id="intensity-fill"></div></div>
+</div>
+
+<div id="emotion-badge">Emotion: NEUTRAL</div>
+
+<div id="recursion-dots">
+  <div class="rdot" id="rd1"></div>
+  <div class="rdot" id="rd2"></div>
+  <div class="rdot" id="rd3"></div>
+  <div class="rdot" id="rd4"></div>
+  <div class="rdot" id="rd5"></div>
+</div>
+
+<div id="narrative">
+  <p class="system">The engine awaits your presence...</p>
+</div>
+
+<div id="controls">
+  <input type="text" id="msg-input" placeholder='Type "solve" to solve a puzzle or "safe" for emergency exit...' disabled />
+  <button id="send-btn" disabled>SEND</button>
+  <button id="calm-btn" disabled>CALM</button>
+</div>
+
+<script>
+  // ── State ─────────────────────────────────────────────────────────────────
+  const API_BASE  = window.location.origin;
+  const WS_BASE   = API_BASE.replace(/^http/, 'ws');
+
+  let ws          = null;
+  let expId       = null;
+  let ambientSound = null;
+  let currentIntensity = 0;
+
+  // ── Emotion colours ───────────────────────────────────────────────────────
+  const EMOTION_COLORS = {
+    fear:     '#ff0000',
+    surprise: '#ffee00',
+    angry:    '#cc2200',
+    disgust:  '#009900',
+    sad:      '#0033aa',
+    happy:    '#00cc44',
+    neutral:  '#666666',
+  };
+
+  // ── DOM helpers ───────────────────────────────────────────────────────────
+  const narrative = document.getElementById('narrative');
+
+  function addLine(text, cls = 'fragment') {
+    const p = document.createElement('p');
+    p.className = cls;
+    p.textContent = text;
+    narrative.appendChild(p);
+    narrative.scrollTop = narrative.scrollHeight;
+  }
+
+  function setIntensity(val) {
+    currentIntensity = val;
+    const pct = Math.round(val * 100);
+    document.getElementById('intensity-fill').style.width = pct + '%';
+    document.getElementById('s-int').textContent = val.toFixed(2);
+
+    const fill = document.getElementById('intensity-fill');
+    if (val > 0.75) {
+      fill.style.background = '#ff0000';
+      fill.classList.add('pulse');
+      document.body.style.background = `rgb(${Math.round(val * 18)}, 0, 0)`;
+    } else if (val > 0.5) {
+      fill.style.background = '#cc2200';
+      fill.classList.remove('pulse');
+      document.body.style.background = '#050000';
+    } else {
+      fill.style.background = '#880000';
+      fill.classList.remove('pulse');
+      document.body.style.background = '#000000';
+    }
+
+    // Ambient audio
+    if (val > 0.6) {
+      startAmbient(val);
+    } else {
+      stopAmbient();
+    }
+  }
+
+  function setRecursion(level) {
+    document.getElementById('s-rec').textContent = level;
+    for (let i = 1; i <= 5; i++) {
+      const dot = document.getElementById('rd' + i);
+      dot.classList.toggle('active', i <= level);
+    }
+  }
+
+  // ── Ambient audio ─────────────────────────────────────────────────────────
+  // Public-domain / CC0 horror ambient (ghostly whispers / low drone).
+  // Replace URL with any royalty-free MP3 you prefer.
+  const AMBIENT_URL = 'https://cdn.pixabay.com/audio/2023/03/20/audio_9b5e2b9e8c.mp3';
+
+  function startAmbient(intensity) {
+    if (ambientSound) {
+      ambientSound.volume(0.15 + intensity * 0.35);
+      return;
+    }
+    ambientSound = new Howl({
+      src: [AMBIENT_URL],
+      loop: true,
+      volume: 0.15 + intensity * 0.35,
+      html5: true,
+    });
+    ambientSound.play();
+  }
+
+  function stopAmbient() {
+    if (ambientSound) {
+      ambientSound.fade(ambientSound.volume(), 0, 2000);
+      setTimeout(() => {
+        if (ambientSound) { ambientSound.stop(); ambientSound = null; }
+      }, 2200);
+    }
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  function connect(id) {
+    expId = id;
+    document.getElementById('s-session').textContent = 'Session: ' + id;
+
+    ws = new WebSocket(`${WS_BASE}/ws/session/${id}`);
+
+    ws.onopen = () => {
+      addLine('Connected. The nightmare is breathing.', 'system');
+      document.getElementById('msg-input').disabled = false;
+      document.getElementById('send-btn').disabled = false;
+      document.getElementById('calm-btn').disabled = false;
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleMessage(data);
+    };
+
+    ws.onclose = () => {
+      addLine('Session ended. The shadows retreat… for now.', 'system');
+      stopAmbient();
+    };
+
+    ws.onerror = () => {
+      addLine('Connection lost. The darkness closes in.', 'system');
+    };
+  }
+
+  function handleMessage(data) {
+    // Initial state
+    if (data.connected) {
+      const s = data.initial_state || {};
+      if (s.fear_intensity != null) setIntensity(s.fear_intensity);
+      if (s.recursion_level != null) setRecursion(s.recursion_level);
+      if (s.heart_rate) document.getElementById('s-hr').textContent = s.heart_rate;
+      return;
+    }
+
+    // Narrative update (from ramp task or puzzle solve)
+    if (data.narrative_update) {
+      const u = data.narrative_update;
+      if (u.narrative_message) addLine('> ' + u.narrative_message, 'fragment');
+      if (u.fear_intensity != null) setIntensity(u.fear_intensity);
+      if (u.recursion_level != null) setRecursion(u.recursion_level);
+      if (u.heart_rate) document.getElementById('s-hr').textContent = u.heart_rate;
+      if (u.gsr != null) document.getElementById('s-gsr').textContent = u.gsr.toFixed(3);
+      if (u.event === 'puzzle_solved') {
+        addLine('[ Puzzle resolved. The tension eases — briefly. ]', 'system');
+      }
+    }
+
+    // Raw biometric update (from rPPG thread)
+    if (data.biometric_update) {
+      const b = data.biometric_update;
+      if (b.heart_rate) document.getElementById('s-hr').textContent = b.heart_rate;
+      if (b.gsr != null) document.getElementById('s-gsr').textContent = b.gsr.toFixed ? b.gsr.toFixed(3) : b.gsr;
+    }
+
+    // Emotion update
+    if (data.emotion_update) {
+      const e = data.emotion_update;
+      const label = document.getElementById('emotion-badge');
+      const sm = e.smoothed_emotion || e.dominant_emotion || 'neutral';
+      const conf = e.confidence ? e.confidence.toFixed(0) : '?';
+      label.textContent = `Emotion: ${sm.toUpperCase()} (${conf}%)`;
+      label.style.color = EMOTION_COLORS[sm] || '#888';
+
+      if (e.fear_intensity != null) setIntensity(e.fear_intensity);
+      if (e.recursion_level != null) setRecursion(e.recursion_level);
+
+      // Fear flash
+      if (sm === 'fear' && e.intensity > 0.7) {
+        document.body.style.background = '#300000';
+        setTimeout(() => {
+          document.body.style.background = currentIntensity > 0.75 ? `rgb(${Math.round(currentIntensity * 18)},0,0)` : '#050000';
+        }, 1200);
+      }
+    }
+
+    // Safety alert
+    if (data.safety_alert) {
+      addLine('⚠ SAFETY: ' + (data.message || data.action || 'Protocol triggered.'), 'alert');
+      setIntensity(0.2);
+      setRecursion(1);
+      stopAmbient();
+    }
+  }
+
+  // ── Send action ───────────────────────────────────────────────────────────
+  function sendAction() {
+    const input = document.getElementById('msg-input');
+    const raw = input.value.trim().toLowerCase();
+    if (!raw || !ws) return;
+
+    if (raw === 'solve') {
+      ws.send(JSON.stringify({ action: 'puzzle_solve', data: {} }));
+    } else if (raw === 'safe' || raw === 'stop' || raw === 'exit') {
+      ws.send(JSON.stringify({ action: 'safe_word' }));
+    } else {
+      ws.send(JSON.stringify({ action: 'ping' }));
+      addLine('[ The engine ignores your words. It watches. ]', 'system');
+    }
+
+    input.value = '';
+  }
+
+  // ── Calm button ───────────────────────────────────────────────────────────
+  async function triggerCalm() {
+    if (!expId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/safety/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: expId, action: 'initiate_calm', severity: 'moderate' }),
+      });
+      const json = await res.json();
+      addLine('[ Calming sequence initiated: ' + json.message + ' ]', 'alert');
+    } catch (e) {
+      addLine('[ Calm request failed. ]', 'system');
+    }
+  }
+
+  // ── Session creation ──────────────────────────────────────────────────────
+  document.getElementById('start-btn').addEventListener('click', async () => {
+    const errEl = document.getElementById('error-msg');
+    errEl.textContent = '';
+    const inputId = document.getElementById('exp-id-input').value.trim();
+    const fear    = document.getElementById('fear-select').value;
+
+    if (inputId) {
+      // Connect directly
+      document.getElementById('setup-overlay').style.display = 'none';
+      connect(inputId);
+    } else {
+      // Create new session
+      try {
+        document.getElementById('start-btn').disabled = true;
+        document.getElementById('start-btn').textContent = 'SUMMONING…';
+
+        const res = await fetch(`${API_BASE}/api/v1/experience/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: 'browser_' + Math.random().toString(36).slice(2, 8),
+            fear_profile: {
+              threat_types: [{ [fear]: 0.9 }],
+              sensory_triggers: { auditory: 0.8, visual: 0.7 },
+              cognitive_engagement: { recursion_depth: 4, meta_awareness: true, puzzle_complexity: 0.7 },
+              physiological_tuning: { heart_rate_target: 130, arousal_curve: 'exponential', recovery_periods: true },
+            },
+            experience_type: 'solo',
+            duration_minutes: 60,
+            intensity_target: 0.85,
+            pedagogical_goals: ['decision_under_pressure', 'pattern_recognition'],
+          }),
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        document.getElementById('setup-overlay').style.display = 'none';
+        connect(json.experience_id);
+      } catch (e) {
+        errEl.textContent = 'Failed to create session: ' + e.message;
+        document.getElementById('start-btn').disabled = false;
+        document.getElementById('start-btn').textContent = 'ENTER THE NIGHTMARE';
+      }
+    }
+  });
+
+  document.getElementById('send-btn').addEventListener('click', sendAction);
+  document.getElementById('msg-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendAction();
+  });
+  document.getElementById('calm-btn').addEventListener('click', triggerCalm);
+</script>
+</body>
+</html>
