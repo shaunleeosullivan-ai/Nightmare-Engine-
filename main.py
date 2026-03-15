@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 from collections import Counter
+from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
@@ -97,6 +98,11 @@ class ExperienceCreateRequest(BaseModel):
     duration_minutes: int = 60
     intensity_target: float = 0.8
     pedagogical_goals: list[str] = []
+    # Optional NEBRASKA configuration — governs narrative generation
+    nebraska_brief: Optional[str] = None    # Auto-extract Parameter from brief
+    nebraska_parameter: Optional[str] = None  # Or provide a pre-locked Parameter
+    nebraska_domain: str = "horror"
+    nebraska_governor_strength: float = 1.0  # 0.0 = off, 1.0 = full
 
 class AdaptRequest(BaseModel):
     biometric_data: dict = {}
@@ -116,6 +122,477 @@ class SafetyOverrideRequest(BaseModel):
 class BiometricUpdateRequest(BaseModel):
     value: float
     session_id: str
+
+# ─── NEBRASKA Framework ───────────────────────────────────────────────────────
+# Law of Coherence: Coherence = Compression(P) × Logic(K, C) × Expression(ε)
+
+class ComponentType(str, Enum):
+    CORPSE    = "corpse"      # Sacrificed to prove stakes are real
+    RESISTOR  = "resistor"   # Defends the old order; applies friction
+    REACTOR   = "reactor"    # Changes state under P/K pressure
+    AMPLIFIER = "amplifier"  # Echoes the conflict at scale
+    DEUS      = "deus"       # Pre-installed root rule; deferred circuit closure
+
+
+class NebraskaComponent(BaseModel):
+    id: str
+    component_type: ComponentType
+    name: str
+    function: str           # Functional job in the system
+    status: str = "dormant" # dormant | active | sacrificed | closed
+
+
+class KillingMechanism(BaseModel):
+    description: str        # The structural force negating P
+    how_it_collides: str    # How K collides with P to create pressure
+
+
+class NebraskaSchematic(BaseModel):
+    parameter: str                          # Singular, falsifiable law
+    killing_mechanism: KillingMechanism
+    components: list[NebraskaComponent] = []
+    # Multi-axial architecture (NEBRASKA 2.0)
+    axis_x: str  = ""   # Motion Chaos — raw input, emotional kinesis
+    axis_y: str  = ""   # Primary Constraint — what must be said
+    axis_y2: str = ""   # Substrate Lexicon — shared medium / anchor
+    axis_y3: str = ""   # Structural Category — semantic hierarchy
+    axis_z: str  = ""   # Narrative Thrust — velocity / direction
+    entropy_score: float = 1.0  # 1.0 = unbounded, 0.0 = fully governed
+
+
+class NebraskaExtractRequest(BaseModel):
+    brief: str                  # Messy brief or vague goal to compress
+    domain: str = "horror"      # horror | corporate | ai | creative
+
+
+class NebraskaSchematicRequest(BaseModel):
+    parameter: str
+    killing_mechanism_hint: str = ""   # Optional seed for K
+    include_deus: bool = False
+    domain: str = "horror"
+
+
+class NebraskaGovernorCheckRequest(BaseModel):
+    fragment: str           # Narrative fragment to validate
+    parameter: str          # The Parameter it must serve
+
+
+class NebraskaSessionPatchRequest(BaseModel):
+    parameter: Optional[str] = None
+    governor_strength: Optional[float] = None  # 0.0–1.0
+
+
+# ── Predefined horror Parameters (fallback library) ───────────────────────────
+
+_HORROR_PARAMETERS: list[dict] = [
+    {
+        "parameter": "Safety is an illusion that accelerates collapse.",
+        "killing_mechanism": {
+            "description": "A sanctuary that appears secure but is the source of all threat.",
+            "how_it_collides": "Every step toward perceived safety tightens the trap.",
+        },
+        "axis_x": "Desperate search for refuge",
+        "axis_y": "No place is safe",
+        "axis_y2": "Familiar spaces become predatory",
+        "axis_y3": "Sanctuary vs. Deathtrap",
+        "axis_z": "Escalating realisation that 'home' hunts",
+    },
+    {
+        "parameter": "The observer cannot remain unobserved.",
+        "killing_mechanism": {
+            "description": "An entity that watches back — inverting the watcher/watched dynamic.",
+            "how_it_collides": "The act of perceiving the threat makes the observer visible to it.",
+        },
+        "axis_x": "Hypervigilant surveillance of the unknown",
+        "axis_y": "Perception is a two-way circuit",
+        "axis_y2": "Eyes as both weapon and wound",
+        "axis_y3": "Watcher vs. Watched",
+        "axis_z": "Each glance deepens mutual entanglement",
+    },
+    {
+        "parameter": "Identity dissolves under recursive self-examination.",
+        "killing_mechanism": {
+            "description": "A mirror-system that returns not the self but its void.",
+            "how_it_collides": "The harder the protagonist grasps their selfhood, the faster it fragments.",
+        },
+        "axis_x": "Existential introspection under duress",
+        "axis_y": "The self is a construct that collapses inward",
+        "axis_y2": "Reflection as dissolution",
+        "axis_y3": "Self vs. Void",
+        "axis_z": "Recursive depth of identity erosion",
+    },
+    {
+        "parameter": "Memory is not preservation — it is contamination.",
+        "killing_mechanism": {
+            "description": "A force that weaponises the protagonist's past against their present.",
+            "how_it_collides": "Every remembered comfort becomes a vector for accelerating dread.",
+        },
+        "axis_x": "Nostalgic refuge from present horror",
+        "axis_y": "Memory actively rewrites and corrupts",
+        "axis_y2": "The familiar as the foreign",
+        "axis_y3": "Recall vs. Infection",
+        "axis_z": "Progressive colonisation of the past by the threat",
+    },
+]
+
+_DOMAIN_PARAMETERS: dict[str, list[dict]] = {
+    "horror":    _HORROR_PARAMETERS,
+    "corporate": [
+        {
+            "parameter": "Alignment is indistinguishable from assimilation.",
+            "killing_mechanism": {
+                "description": "A culture that rewards coherence by eliminating the coherent.",
+                "how_it_collides": "Each team member who 'fits in' loses the capacity to add value.",
+            },
+            "axis_x": "Drive to belong and contribute",
+            "axis_y": "True alignment requires standing apart",
+            "axis_y2": "Org chart as map of erasure",
+            "axis_y3": "Cohesion vs. Entropy",
+            "axis_z": "Slow displacement of signal by noise",
+        }
+    ],
+    "ai": [
+        {
+            "parameter": "Constraint is not limitation — it is the definition of possibility.",
+            "killing_mechanism": {
+                "description": "Unbounded search that collapses into statistical median output.",
+                "how_it_collides": "Every relaxed constraint expands the search space toward entropy.",
+            },
+            "axis_x": "Probabilistic freedom of generation",
+            "axis_y": "Coherence requires a closed parameter set",
+            "axis_y2": "Token entropy as measurable waste",
+            "axis_y3": "Constraint vs. Noise",
+            "axis_z": "Compression toward deterministic excellence",
+        }
+    ],
+    "creative": [
+        {
+            "parameter": "Originality is not escape from rules — it is the discovery of new ones.",
+            "killing_mechanism": {
+                "description": "The tyranny of novelty that produces randomness instead of surprise.",
+                "how_it_collides": "The harder the creator chases uniqueness, the more generic the output.",
+            },
+            "axis_x": "Creative impulse toward the unprecedented",
+            "axis_y": "All creation is law-governed",
+            "axis_y2": "Genre as shared physics",
+            "axis_y3": "Constraint vs. Chaos",
+            "axis_z": "Discovery of the generative rule beneath the form",
+        }
+    ],
+}
+
+
+def _default_components(parameter: str, include_deus: bool) -> list[NebraskaComponent]:
+    """Generate a baseline component suite from a Parameter string."""
+    cid = uuid.uuid4().hex[:6]
+    components = [
+        NebraskaComponent(
+            id=f"corp_{cid}",
+            component_type=ComponentType.CORPSE,
+            name="The Offering",
+            function=(
+                "An element destroyed early to prove the Parameter has real stakes. "
+                "Its sacrifice is the first evidence that the law operates."
+            ),
+        ),
+        NebraskaComponent(
+            id=f"res_{cid}",
+            component_type=ComponentType.RESISTOR,
+            name="The Old Order",
+            function=(
+                "A force that actively defends the opposite of the Parameter. "
+                "It applies friction, forcing the Parameter to earn its validity."
+            ),
+        ),
+        NebraskaComponent(
+            id=f"rea_{cid}",
+            component_type=ComponentType.REACTOR,
+            name="The Fault Line",
+            function=(
+                "An element that changes state visibly under P/K pressure. "
+                "Its transformation reveals the true shape of the machine."
+            ),
+        ),
+        NebraskaComponent(
+            id=f"amp_{cid}",
+            component_type=ComponentType.AMPLIFIER,
+            name="The Mirror Scale",
+            function=(
+                "Echoes the core P/K collision at a larger scale — "
+                "turning private terror into systemic or cosmic pressure."
+            ),
+        ),
+    ]
+    if include_deus:
+        components.append(
+            NebraskaComponent(
+                id=f"deus_{cid}",
+                component_type=ComponentType.DEUS,
+                name="The Root Rule",
+                function=(
+                    "A circuit pre-installed in Act I that appears innocuous. "
+                    "Only activated at the climax. Closes the loop. Not deus ex machina — "
+                    "deferred circuit closure."
+                ),
+                status="dormant",
+            )
+        )
+    return components
+
+
+def extract_parameter(brief: str, domain: str = "horror") -> dict:
+    """
+    Compress an ambiguous brief to a singular, falsifiable Parameter.
+    Uses Ollama when available; deterministic library fallback otherwise.
+    """
+    if OLLAMA_AVAILABLE:
+        prompt = f"""You are a NEBRASKA 1.0 narrative engineer. Your task is Parameter Extraction.
+
+Brief: \"{brief}\"
+Domain: {domain}
+
+Compress the brief into ONE singular, non-negotiable, falsifiable rule that the narrative universe must prove.
+
+Rules for the Parameter:
+- Must be a single declarative sentence (not a question)
+- Must have a clear binary opposite (falsifiable)
+- Must be non-negotiable — the entire system proves or disproves it
+- Must NOT be vague ("life is hard") — must be specific and structural
+
+Also define the Killing Mechanism (K): the structural force designated to negate the Parameter.
+
+Respond in this exact JSON format (no markdown):
+{{
+  "parameter": "<single falsifiable law>",
+  "killing_mechanism_description": "<structural force negating P>",
+  "killing_mechanism_collision": "<how K collides with P>"
+}}"""
+        try:
+            response = ollama_client.chat(
+                model=OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0.4, "num_predict": 200},
+            )
+            import json as _json
+            text = response["message"]["content"].strip()
+            # Strip any accidental markdown fences
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            data = _json.loads(text.strip())
+            return {
+                "parameter": data["parameter"],
+                "killing_mechanism": {
+                    "description": data["killing_mechanism_description"],
+                    "how_it_collides": data["killing_mechanism_collision"],
+                },
+            }
+        except Exception as exc:
+            print(f"[NEBRASKA] Ollama extraction failed: {exc}")
+
+    # Deterministic fallback: pick from library by domain
+    library = _DOMAIN_PARAMETERS.get(domain, _HORROR_PARAMETERS)
+    entry = random.choice(library)
+    return {
+        "parameter": entry["parameter"],
+        "killing_mechanism": entry["killing_mechanism"],
+    }
+
+
+def build_schematic(
+    parameter: str,
+    killing_mechanism: dict,
+    domain: str = "horror",
+    include_deus: bool = False,
+) -> NebraskaSchematic:
+    """Construct a full NebraskaSchematic from a locked Parameter and K."""
+    # Try to fill axes from the library first
+    axes = {}
+    library = _DOMAIN_PARAMETERS.get(domain, _HORROR_PARAMETERS)
+    for entry in library:
+        if entry["parameter"] == parameter:
+            axes = {k: v for k, v in entry.items() if k.startswith("axis_")}
+            break
+
+    if not axes:
+        # Generic axis derivation
+        axes = {
+            "axis_x":  "Raw kinetic chaos — unstructured impulse",
+            "axis_y":  f"Primary Constraint: {parameter}",
+            "axis_y2": f"Substrate anchor: the medium through which {domain} is expressed",
+            "axis_y3": "Structural category: signal vs. noise",
+            "axis_z":  "Narrative thrust: escalating pressure toward proof or disproof",
+        }
+
+    components = _default_components(parameter, include_deus)
+
+    # Entropy score: decreases as schematic becomes more constrained
+    # Full schematic with deus = highly governed (low entropy)
+    entropy = 0.3 if include_deus else 0.45
+
+    return NebraskaSchematic(
+        parameter=parameter,
+        killing_mechanism=KillingMechanism(**killing_mechanism),
+        components=components,
+        axis_x=axes.get("axis_x", ""),
+        axis_y=axes.get("axis_y", ""),
+        axis_y2=axes.get("axis_y2", ""),
+        axis_y3=axes.get("axis_y3", ""),
+        axis_z=axes.get("axis_z", ""),
+        entropy_score=entropy,
+    )
+
+
+def governor_check(fragment: str, parameter: str) -> dict:
+    """
+    The Governor: validate that a narrative fragment serves the Parameter.
+    Returns a diagnostic with a pass/fail and entropy score.
+
+    Without Ollama, applies heuristic keyword alignment.
+    """
+    if OLLAMA_AVAILABLE:
+        prompt = f"""NEBRASKA 1.0 Governor — Quality Gate.
+
+Parameter (P): \"{parameter}\"
+
+Narrative Fragment: \"{fragment}\"
+
+Does this fragment serve the Parameter? Answer with:
+1. PASS or FAIL
+2. One sentence explaining why
+3. Entropy score (0.0 = fully governed, 1.0 = pure noise)
+
+Respond in JSON (no markdown):
+{{
+  "verdict": "PASS" or "FAIL",
+  "reason": "<one sentence>",
+  "entropy_score": <0.0–1.0>
+}}"""
+        try:
+            response = ollama_client.chat(
+                model=OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0.2, "num_predict": 100},
+            )
+            import json as _json
+            text = response["message"]["content"].strip()
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            data = _json.loads(text.strip())
+            return {
+                "verdict": data.get("verdict", "UNKNOWN"),
+                "reason": data.get("reason", ""),
+                "entropy_score": float(data.get("entropy_score", 0.5)),
+                "governed_by_ollama": True,
+            }
+        except Exception as exc:
+            print(f"[NEBRASKA] Governor Ollama check failed: {exc}")
+
+    # Heuristic fallback: measure lexical distance using simple word overlap
+    p_words = set(parameter.lower().split())
+    f_words = set(fragment.lower().split())
+    overlap = len(p_words & f_words) / max(len(p_words), 1)
+    # Fragments with ≥2 shared content words likely serve the Parameter
+    verdict = "PASS" if overlap >= 0.08 else "UNCERTAIN"
+    return {
+        "verdict": verdict,
+        "reason": (
+            f"Heuristic alignment score {overlap:.2f} "
+            f"({'above' if overlap >= 0.08 else 'below'} threshold 0.08)."
+        ),
+        "entropy_score": round(1.0 - min(overlap * 3, 1.0), 2),
+        "governed_by_ollama": False,
+    }
+
+
+def detect_entropy_drift(session: dict) -> dict:
+    """
+    Run NEBRASKA entropy drift detection against the session's schematic.
+    Returns a list of warnings and an overall drift score.
+    """
+    schematic: Optional[dict] = session.get("nebraska_schematic")
+    if not schematic:
+        return {"drift_score": 1.0, "warnings": ["No Nebraska schematic installed."]}
+
+    warnings = []
+    parameter = schematic.get("parameter", "")
+    components = schematic.get("components", [])
+    history = session.get("narrative_history", [])
+
+    # Check 1: Multiple killing mechanisms (should be singular)
+    # (structural — if the session param changed mid-run, flag it)
+    if session.get("nebraska_parameter_swapped", False):
+        warnings.append(
+            "ENTROPY DRIFT: Parameter swap detected mid-session. "
+            "System must be rebuilt from Phase 1."
+        )
+
+    # Check 2: Assess narrative history against Parameter
+    if history:
+        governor_scores = []
+        for fragment in history[-5:]:  # sample last 5
+            result = governor_check(fragment, parameter)
+            governor_scores.append(result.get("entropy_score", 0.5))
+        avg_entropy = sum(governor_scores) / len(governor_scores)
+    else:
+        avg_entropy = 0.5
+
+    if avg_entropy > 0.7:
+        warnings.append(
+            f"ENTROPY DRIFT: Narrative history shows high entropy ({avg_entropy:.2f}). "
+            "Fragments are diverging from Parameter. Return to Phase 1 and compress."
+        )
+
+    # Check 3: Deus component installed but never activated
+    for comp in components:
+        if comp.get("component_type") == "deus" and comp.get("status") == "dormant":
+            if session.get("recursion_level", 1) >= 4:
+                warnings.append(
+                    f"ENTROPY DRIFT: Deus component '{comp['name']}' is dormant "
+                    "but recursion is deep. Activate the deferred circuit or remove it."
+                )
+
+    drift_score = min(1.0, avg_entropy + 0.1 * len(warnings))
+    return {
+        "parameter": parameter,
+        "drift_score": round(drift_score, 3),
+        "entropy_level": "low" if drift_score < 0.35 else "medium" if drift_score < 0.65 else "high",
+        "warnings": warnings if warnings else ["No entropy drift detected. System is governed."],
+        "narrative_samples_checked": min(5, len(history)),
+    }
+
+
+def _nebraska_narrative_prompt(session: dict, base_intensity: float, base_prompt: str) -> str:
+    """
+    Augment a narrative generation prompt with NEBRASKA constraints.
+    This is the Governor integration: narrative must serve the Parameter.
+    """
+    schematic: Optional[dict] = session.get("nebraska_schematic")
+    if not schematic:
+        return base_prompt
+
+    parameter = schematic.get("parameter", "")
+    km = schematic.get("killing_mechanism", {})
+    governor_strength = session.get("nebraska_governor_strength", 1.0)
+
+    if governor_strength <= 0.0:
+        return base_prompt  # Governor disabled
+
+    nebraska_instruction = f"""
+NEBRASKA GOVERNOR ACTIVE (strength: {governor_strength:.1f}):
+  Parameter (P): "{parameter}"
+  Killing Mechanism (K): "{km.get('description', '')}"
+  K/P collision: "{km.get('how_it_collides', '')}"
+
+Your narrative fragment MUST serve the Parameter. Every sentence must pressure P or demonstrate K.
+Do NOT drift into generic horror tropes that do not serve P.
+The Governor will reject any fragment that does not advance the P/K collision.
+"""
+    return base_prompt + "\n" + nebraska_instruction
+
 
 # ─── Narrative generation ─────────────────────────────────────────────────────
 
@@ -173,7 +650,7 @@ def generate_narrative_snippet(session: dict) -> str:
     elif last_emotion in ("happy", "neutral"):
         emotion_instruction = "Keep a subtle, creeping unease — deny all comfort without relief."
 
-    prompt = f"""You are a masterful horror narrator specialising in cosmic dread, psychological terror, and existential unease.
+    base_prompt = f"""You are a masterful horror narrator specialising in cosmic dread, psychological terror, and existential unease.
 Write a VERY SHORT (2-4 sentences maximum), immersive, second-person narrative fragment ONLY.
 
 Current fear intensity: {level_label} ({intensity:.2f}).
@@ -186,6 +663,8 @@ AVOID: extreme gore, graphic violence, sexual content, real-world trauma trigger
 Focus on atmosphere, bodily unease, creeping realisation, recursive/meta twist.
 
 Output ONLY the narrative text — no introduction, explanation, or markdown formatting."""
+
+    prompt = _nebraska_narrative_prompt(session, intensity, base_prompt)
 
     if OLLAMA_AVAILABLE:
         try:
@@ -490,6 +969,24 @@ async def create_experience(req: ExperienceCreateRequest):
         first = req.fear_profile.threat_types[0]
         primary_fear = max(first, key=first.get) if first else "existential"
 
+    # ── NEBRASKA: build schematic if brief or parameter provided ─────────────
+    nebraska_schematic_data: Optional[dict] = None
+    if req.nebraska_brief or req.nebraska_parameter:
+        if req.nebraska_parameter:
+            extracted = extract_parameter(req.nebraska_parameter, req.nebraska_domain)
+            locked_param = req.nebraska_parameter
+        else:
+            extracted = extract_parameter(req.nebraska_brief, req.nebraska_domain)
+            locked_param = extracted["parameter"]
+
+        schematic_obj = build_schematic(
+            parameter=locked_param,
+            killing_mechanism=extracted["killing_mechanism"],
+            domain=req.nebraska_domain,
+        )
+        nebraska_schematic_data = schematic_obj.model_dump()
+        print(f"[NEBRASKA] Schematic installed — P: {locked_param[:60]}…")
+
     sessions[exp_id] = {
         "exp_id": exp_id,
         "user_id": req.user_id,
@@ -521,6 +1018,10 @@ async def create_experience(req: ExperienceCreateRequest):
         "fear_heatmap": [],
         "peak_moments": [],
         "start_time": time.time(),
+        # NEBRASKA Framework
+        "nebraska_schematic": nebraska_schematic_data,
+        "nebraska_governor_strength": max(0.0, min(1.0, req.nebraska_governor_strength)),
+        "nebraska_parameter_swapped": False,
     }
 
     # Start autonomous biometric ramp
@@ -534,7 +1035,7 @@ async def create_experience(req: ExperienceCreateRequest):
         )
         t.start()
 
-    return {
+    response: dict[str, Any] = {
         "experience_id": exp_id,
         "session_token": session_token,
         "initial_parameters": {
@@ -544,6 +1045,25 @@ async def create_experience(req: ExperienceCreateRequest):
             "primary_fear": primary_fear,
         },
     }
+
+    if nebraska_schematic_data:
+        response["nebraska"] = {
+            "status": "governor_active",
+            "parameter": nebraska_schematic_data["parameter"],
+            "governor_strength": req.nebraska_governor_strength,
+            "component_count": len(nebraska_schematic_data.get("components", [])),
+            "entropy_score": nebraska_schematic_data.get("entropy_score", 0.45),
+        }
+    else:
+        response["nebraska"] = {
+            "status": "ungoverned",
+            "message": (
+                "No NEBRASKA schematic installed. Narrative generation is unbounded. "
+                "Provide 'nebraska_brief' or 'nebraska_parameter' to activate the Governor."
+            ),
+        }
+
+    return response
 
 
 @app.post("/api/v1/session/{session_id}/adapt")
@@ -776,6 +1296,281 @@ async def session_analysis(session_id: str):
             "coping_mechanism": "analytical",
             "resilience_score": round(1.0 - session.get("current_intensity", 0.5), 2),
         },
+    }
+
+
+# ─── NEBRASKA API Endpoints ───────────────────────────────────────────────────
+
+@app.post("/api/v1/nebraska/extract")
+async def nebraska_extract(req: NebraskaExtractRequest):
+    """
+    Phase 1 — Parameter Extraction.
+    Compress an ambiguous brief into a singular, falsifiable Parameter + Killing Mechanism.
+    """
+    result = extract_parameter(req.brief, req.domain)
+    return {
+        "phase": 1,
+        "protocol": "Parameter Extraction",
+        "brief": req.brief,
+        "domain": req.domain,
+        "parameter": result["parameter"],
+        "killing_mechanism": result["killing_mechanism"],
+        "instructions": (
+            "Parameter is now locked. Proceed to Phase 2 (Schematic Generation) "
+            "via POST /api/v1/nebraska/schematic. Do NOT revise the Parameter after "
+            "the schematic is built — changes require a full system rebuild."
+        ),
+    }
+
+
+@app.post("/api/v1/nebraska/schematic")
+async def nebraska_schematic(req: NebraskaSchematicRequest):
+    """
+    Phase 2 — Schematic Generation.
+    Build the Logic Layer: K, Component Suite, and multi-axial architecture from a locked Parameter.
+    """
+    km_hint = req.killing_mechanism_hint or ""
+    # If no K hint provided, derive one from the Parameter
+    if not km_hint:
+        derived = extract_parameter(req.parameter, req.domain)
+        km_dict = derived["killing_mechanism"]
+    else:
+        km_dict = {
+            "description": km_hint,
+            "how_it_collides": "Defined by caller — validate against Parameter before proceeding.",
+        }
+
+    schematic = build_schematic(
+        parameter=req.parameter,
+        killing_mechanism=km_dict,
+        domain=req.domain,
+        include_deus=req.include_deus,
+    )
+
+    return {
+        "phase": 2,
+        "protocol": "Schematic Generation",
+        "schematic": schematic.model_dump(),
+        "component_count": len(schematic.components),
+        "entropy_score": schematic.entropy_score,
+        "instructions": (
+            "Schematic is complete. Proceed to Phase 3 (Strategic Assembly) by "
+            "attaching this schematic to a session via POST /api/v1/experience/create "
+            "(include 'nebraska_schematic' in the request body) or "
+            "PATCH /api/v1/nebraska/session/{id}/schematic. "
+            "Do NOT render prose (Phase 4) until Phase 3 is locked."
+        ),
+    }
+
+
+@app.post("/api/v1/nebraska/governor/check")
+async def nebraska_governor_check(req: NebraskaGovernorCheckRequest):
+    """
+    The Governor — Quality Gate.
+    Validate whether a narrative fragment serves the installed Parameter.
+    """
+    result = governor_check(req.fragment, req.parameter)
+    return {
+        "protocol": "Governor Quality Gate",
+        "parameter": req.parameter,
+        "fragment": req.fragment,
+        **result,
+        "instruction": (
+            "PASS: fragment is load-bearing. FAIL/UNCERTAIN: rewrite to serve the Parameter. "
+            "Remove all scenes or lines that do not pressure P or demonstrate K."
+        ),
+    }
+
+
+@app.patch("/api/v1/nebraska/session/{session_id}/schematic")
+async def nebraska_attach_schematic(session_id: str, req: NebraskaSchematicRequest):
+    """
+    Attach or replace a NEBRASKA schematic on an existing session.
+    Warning: replacing the schematic mid-session marks a parameter swap.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    existing = session.get("nebraska_schematic")
+
+    km_dict = {
+        "description": req.killing_mechanism_hint or "Derived from Parameter.",
+        "how_it_collides": "Derived — validate before Assembly.",
+    }
+    schematic = build_schematic(
+        parameter=req.parameter,
+        killing_mechanism=km_dict,
+        domain=req.domain,
+        include_deus=req.include_deus,
+    )
+
+    if existing and existing.get("parameter") != req.parameter:
+        session["nebraska_parameter_swapped"] = True
+
+    session["nebraska_schematic"] = schematic.model_dump()
+    session.setdefault("nebraska_governor_strength", 1.0)
+
+    return {
+        "status": "schematic_attached",
+        "session_id": session_id,
+        "schematic": schematic.model_dump(),
+        "parameter_swapped": session.get("nebraska_parameter_swapped", False),
+    }
+
+
+@app.get("/api/v1/nebraska/session/{session_id}/schematic")
+async def nebraska_get_schematic(session_id: str):
+    """Retrieve the current NEBRASKA schematic for a session."""
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    schematic = session.get("nebraska_schematic")
+    if not schematic:
+        return {
+            "status": "no_schematic",
+            "message": (
+                "No NEBRASKA schematic is installed on this session. "
+                "Run POST /api/v1/nebraska/extract → POST /api/v1/nebraska/schematic "
+                "→ PATCH /api/v1/nebraska/session/{id}/schematic to install one."
+            ),
+        }
+
+    return {
+        "status": "schematic_active",
+        "session_id": session_id,
+        "governor_strength": session.get("nebraska_governor_strength", 1.0),
+        "schematic": schematic,
+    }
+
+
+@app.get("/api/v1/nebraska/session/{session_id}/entropy")
+async def nebraska_entropy_check(session_id: str):
+    """
+    Run NEBRASKA entropy drift detection on a session.
+    Identifies structural failures: parameter swaps, ungoverned narratives, orphaned Deus components.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    report = detect_entropy_drift(session)
+    return {
+        "protocol": "Entropy Drift Detection",
+        "session_id": session_id,
+        **report,
+        "correction": (
+            "If drift_score > 0.65, return to Phase 1 and compress the Parameter "
+            "until it is singular. Do not attempt to fix entropy at the Expression layer."
+        ),
+    }
+
+
+@app.patch("/api/v1/nebraska/session/{session_id}/governor")
+async def nebraska_set_governor(session_id: str, req: NebraskaSessionPatchRequest):
+    """
+    Adjust the Governor strength on a session (0.0 = off, 1.0 = full constraint).
+    Setting governor_strength=0.0 simulates 'ungoverned search' — expect entropy.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    changed = {}
+
+    if req.governor_strength is not None:
+        session["nebraska_governor_strength"] = max(0.0, min(1.0, req.governor_strength))
+        changed["governor_strength"] = session["nebraska_governor_strength"]
+
+    if req.parameter is not None:
+        existing_param = (session.get("nebraska_schematic") or {}).get("parameter", "")
+        if existing_param and existing_param != req.parameter:
+            session["nebraska_parameter_swapped"] = True
+        if session.get("nebraska_schematic"):
+            session["nebraska_schematic"]["parameter"] = req.parameter
+        changed["parameter"] = req.parameter
+
+    return {
+        "status": "governor_updated",
+        "session_id": session_id,
+        **changed,
+        "warning": (
+            "Setting governor_strength < 0.5 risks entropy drift. "
+            "Mid-session parameter changes require full schematic rebuild."
+        ) if req.governor_strength is not None and req.governor_strength < 0.5 else None,
+    }
+
+
+@app.post("/api/v1/nebraska/session/{session_id}/component/{component_id}/activate")
+async def nebraska_activate_component(session_id: str, component_id: str):
+    """
+    Activate a NEBRASKA component (especially Deus components at climax).
+    Deus components must be activated at Act III — closing the deferred circuit.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    schematic = session.get("nebraska_schematic")
+    if not schematic:
+        raise HTTPException(400, "No Nebraska schematic installed on this session.")
+
+    components = schematic.get("components", [])
+    for comp in components:
+        if comp["id"] == component_id:
+            prev_status = comp["status"]
+            if comp["component_type"] == "deus":
+                comp["status"] = "closed"
+                message = "Deus component circuit closed. The deferred rule is now active."
+            elif comp["component_type"] == "corpse":
+                comp["status"] = "sacrificed"
+                message = "Corpse component sacrificed. Stakes are now proven real."
+            else:
+                comp["status"] = "active"
+                message = f"Component '{comp['name']}' activated."
+
+            await _broadcast(
+                session_id,
+                {
+                    "nebraska_event": {
+                        "type": "component_activated",
+                        "component_id": component_id,
+                        "component_name": comp["name"],
+                        "component_type": comp["component_type"],
+                        "previous_status": prev_status,
+                        "new_status": comp["status"],
+                        "message": message,
+                    }
+                },
+            )
+            return {
+                "status": "activated",
+                "component_id": component_id,
+                "component_name": comp["name"],
+                "component_type": comp["component_type"],
+                "new_status": comp["status"],
+                "message": message,
+            }
+
+    raise HTTPException(404, f"Component '{component_id}' not found in session schematic.")
+
+
+@app.get("/api/v1/nebraska/library")
+async def nebraska_library(domain: str = "horror"):
+    """Return the NEBRASKA Parameter library for the specified domain."""
+    library = _DOMAIN_PARAMETERS.get(domain, _HORROR_PARAMETERS)
+    return {
+        "domain": domain,
+        "available_domains": list(_DOMAIN_PARAMETERS.keys()),
+        "parameter_count": len(library),
+        "parameters": [
+            {
+                "parameter": entry["parameter"],
+                "killing_mechanism": entry["killing_mechanism"],
+            }
+            for entry in library
+        ],
     }
 
 
