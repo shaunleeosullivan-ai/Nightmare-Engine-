@@ -204,6 +204,54 @@
       background: var(--crimson);
       box-shadow: 0 0 6px var(--crimson);
     }
+
+    /* ── Cognitive Alignment Panel ── */
+    #alignment-panel {
+      flex-shrink: 0;
+      border: 1px solid #001a00;
+      background: #000a00;
+      padding: 8px 12px;
+      border-radius: 2px;
+      font-size: 0.8em;
+    }
+    #alignment-panel .al-header {
+      color: #004400;
+      letter-spacing: 0.2em;
+      font-size: 0.75em;
+      margin-bottom: 6px;
+    }
+    #alignment-panel .al-row {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #alignment-panel .al-key { color: #446644; }
+    #alignment-panel .al-val { color: #00cc44; transition: color 0.4s; }
+    #alignment-panel .al-val.warn { color: #ffcc00; }
+    #alignment-panel .al-val.danger { color: #ff4400; }
+
+    #coherence-track {
+      height: 6px;
+      background: #001a00;
+      border: 1px solid #002200;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    #coherence-fill {
+      height: 100%;
+      background: #00cc44;
+      width: 0%;
+      transition: width 1.5s ease, background 1s ease;
+    }
+    #drift-alert {
+      color: #ff4400;
+      font-size: 0.75em;
+      min-height: 1em;
+      margin-top: 4px;
+      letter-spacing: 0.1em;
+    }
   </style>
 </head>
 <body>
@@ -255,6 +303,20 @@
   <div class="rdot" id="rd5"></div>
 </div>
 
+<!-- ── Cognitive Alignment Panel (A/B = Story) ─────────────────────── -->
+<div id="alignment-panel">
+  <div class="al-header">COGNITIVE ALIGNMENT — A/B = STORY</div>
+  <div class="al-row">
+    <span><span class="al-key">SCORE: </span><span class="al-val" id="al-score">—</span></span>
+    <span><span class="al-key">LOAD: </span><span class="al-val" id="al-load">—</span></span>
+    <span><span class="al-key">STATE: </span><span class="al-val" id="al-coherence">—</span></span>
+    <span><span class="al-key">GOV: </span><span class="al-val" id="al-gov">INACTIVE</span></span>
+    <span><span class="al-key">STIMULUS: </span><span class="al-val" id="al-stimulus">—</span></span>
+  </div>
+  <div id="coherence-track"><div id="coherence-fill"></div></div>
+  <div id="drift-alert"></div>
+</div>
+
 <div id="narrative">
   <p class="system">The engine awaits your presence...</p>
 </div>
@@ -269,6 +331,16 @@
   // ── State ─────────────────────────────────────────────────────────────────
   const API_BASE  = window.location.origin;
   const WS_BASE   = API_BASE.replace(/^http/, 'ws');
+
+  // ── Coherence colour map ───────────────────────────────────────────────────
+  const COHERENCE_COLORS = {
+    SOUP:      '#ff2200',
+    DRIFT:     '#ff6600',
+    NOISE:     '#ffaa00',
+    SIGNAL:    '#ccee00',
+    RAILS:     '#44dd44',
+    ALIGNMENT: '#00ff88',
+  };
 
   let ws          = null;
   let expId       = null;
@@ -448,6 +520,66 @@
       setIntensity(0.2);
       setRecursion(1);
       stopAmbient();
+    }
+
+    // Cognitive Alignment update (A/B = Story)
+    if (data.alignment_update) {
+      updateAlignment(data.alignment_update);
+    }
+  }
+
+  // ── Cognitive Alignment display ───────────────────────────────────────────
+  function updateAlignment(a) {
+    const score     = a.alignment_score   != null ? a.alignment_score   : null;
+    const load      = a.cognitive_load    != null ? a.cognitive_load    : null;
+    const coherence = a.story_coherence   || '—';
+    const govActive = a.governor_active   || false;
+    const stimulus  = a.stimulus_magnitude != null ? a.stimulus_magnitude : null;
+
+    // Score
+    const scoreEl = document.getElementById('al-score');
+    if (score != null) {
+      scoreEl.textContent = score.toFixed(3);
+      scoreEl.className   = 'al-val' + (score < 0.4 ? ' danger' : score < 0.65 ? ' warn' : '');
+    }
+
+    // Cognitive load
+    const loadEl = document.getElementById('al-load');
+    if (load != null) {
+      loadEl.textContent = load.toFixed(3);
+      loadEl.className   = 'al-val' + (load > 0.6 ? ' danger' : load > 0.35 ? ' warn' : '');
+    }
+
+    // Coherence label
+    const cohEl = document.getElementById('al-coherence');
+    cohEl.textContent = coherence;
+    cohEl.style.color = COHERENCE_COLORS[coherence] || '#00cc44';
+
+    // Governor indicator
+    const govEl = document.getElementById('al-gov');
+    govEl.textContent = govActive ? 'ENGAGED' : 'STANDBY';
+    govEl.style.color  = govActive ? '#00ff88' : '#446644';
+
+    // Stimulus magnitude
+    if (stimulus != null) {
+      document.getElementById('al-stimulus').textContent = stimulus.toFixed(3);
+    }
+
+    // Coherence fill bar
+    if (score != null) {
+      const fill = document.getElementById('coherence-fill');
+      fill.style.width      = Math.round(score * 100) + '%';
+      fill.style.background = COHERENCE_COLORS[coherence] || '#00cc44';
+    }
+
+    // Drift alert
+    const driftEl = document.getElementById('drift-alert');
+    if (coherence === 'SOUP' || coherence === 'DRIFT') {
+      driftEl.textContent = '⚠ DRIFT — Governor constraint insufficient. Entropy exceeds rails.';
+    } else if (coherence === 'ALIGNMENT') {
+      driftEl.textContent = '✓ ALIGNED — Nebraska protocol fully engaged. Zero drift.';
+    } else {
+      driftEl.textContent = '';
     }
   }
 

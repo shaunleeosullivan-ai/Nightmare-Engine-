@@ -3,14 +3,21 @@ NIGHTMARE ENGINE — Bio-Adaptive Horror RPG Backend
 FastAPI server implementing the Nightmare Engine API spec.
 
 Endpoints:
-  POST /api/v1/experience/create       — Create a new horror session
-  POST /api/v1/session/{id}/adapt      — Adaptive difficulty update
-  POST /api/v1/narrative/generate      — Generate scenario narrative
-  POST /api/v1/safety/override         — Emergency safety controls
-  POST /api/v1/biometrics/{type}       — Inject biometric data
-  GET  /api/v1/session/{id}/analysis   — Post-session analytics
-  WS   /ws/session/{id}                — Real-time session WebSocket
-  WS   /ws/analytics/{id}             — Real-time analytics WebSocket
+  POST /api/v1/experience/create              — Create a new horror session
+  POST /api/v1/session/{id}/adapt             — Adaptive difficulty update
+  POST /api/v1/narrative/generate             — Generate scenario narrative
+  POST /api/v1/safety/override                — Emergency safety controls
+  POST /api/v1/biometrics/{type}              — Inject biometric data
+  GET  /api/v1/session/{id}/analysis          — Post-session analytics
+  WS   /ws/session/{id}                       — Real-time session WebSocket
+  WS   /ws/analytics/{id}                     — Real-time analytics WebSocket
+
+  ── Cognitive Alignment Framework (A/B = Story) ──
+  POST /api/v1/session/{id}/alignment/anchor  — Set the Governor anchor (B)
+  GET  /api/v1/session/{id}/alignment/state   — Current alignment state
+  GET  /api/v1/session/{id}/alignment/trajectory — Recovery trajectory analytics
+  POST /api/v1/alignment/lexicon/test         — Nebraska 2.0 drift test
+  GET  /api/v1/alignment/lexicon              — Full Deterministic Lexicon
 """
 
 import asyncio
@@ -23,6 +30,13 @@ from typing import Any, Optional
 
 import numpy as np
 
+import cognitive_alignment as cal
+from cognitive_alignment import (
+    AnchorSetRequest,
+    GovernorAnchor,
+    LexiconTestRequest,
+    DETERMINISTIC_LEXICON,
+)
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -253,6 +267,28 @@ async def gradual_ramp_task(exp_id: str) -> None:
                 print(f"[SAFETY] Auto-calm triggered for {exp_id}")
         else:
             session["high_hr_start"] = None
+
+        # ── Cognitive Alignment: compute A/B = Story ─────────────────────────
+        engine: cal.CognitiveAlignmentEngine = session.get("alignment_engine")
+        if engine is not None:
+            stimulus = engine.stimulus_from_session(session)
+            alignment = engine.compute_alignment(stimulus)
+            session["alignment_state"] = alignment
+            await _broadcast(
+                exp_id,
+                {
+                    "alignment_update": {
+                        "alignment_score":      alignment.alignment_score,
+                        "cognitive_load":       alignment.cognitive_load,
+                        "story_coherence":      alignment.story_coherence,
+                        "coherence_description": alignment.coherence_description,
+                        "governor_active":      alignment.governor_active,
+                        "stimulus_magnitude":   round(stimulus.magnitude, 4),
+                        "governor_strength":    alignment.governor.constraint_strength,
+                        "timestamp":            alignment.timestamp,
+                    }
+                },
+            )
 
         # Narrative generation & broadcast
         if not session.get("safety_mode", False):
@@ -521,6 +557,9 @@ async def create_experience(req: ExperienceCreateRequest):
         "fear_heatmap": [],
         "peak_moments": [],
         "start_time": time.time(),
+        # ── Cognitive Alignment Framework (A/B = Story) ──
+        "alignment_engine": cal.create_engine(),
+        "alignment_state": None,   # last computed AlignmentState
     }
 
     # Start autonomous biometric ramp
@@ -776,6 +815,189 @@ async def session_analysis(session_id: str):
             "coping_mechanism": "analytical",
             "resilience_score": round(1.0 - session.get("current_intensity", 0.5), 2),
         },
+    }
+
+
+# ─── Cognitive Alignment Framework endpoints ──────────────────────────────────
+
+@app.post("/api/v1/session/{session_id}/alignment/anchor")
+async def set_alignment_anchor(session_id: str, req: AnchorSetRequest):
+    """
+    Nebraska 1.0 — Set the Governor anchor (B) for this session.
+
+    The anchor is the fixed external reference point that constrains
+    stimulus entropy (A), externalising the prefrontal cortex and
+    reducing the metabolic cost of achieving semantic coherence.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    engine: cal.CognitiveAlignmentEngine = session.get("alignment_engine")
+    if engine is None:
+        raise HTTPException(500, "Alignment engine not initialised")
+
+    # Validate locked_terms against known lexicon
+    valid_terms = [t for t in req.locked_terms if t in DETERMINISTIC_LEXICON]
+    if not valid_terms:
+        valid_terms = list(DETERMINISTIC_LEXICON.keys())
+
+    anchor = GovernorAnchor(
+        anchor_id=f"anchor_{session_id[:8]}",
+        anchor_phrase=req.anchor_phrase,
+        constraint_strength=req.constraint_strength,
+        activation_threshold=req.activation_threshold,
+        locked_terms=valid_terms,
+    )
+    engine.set_default_anchor(anchor)
+
+    return {
+        "anchor_set": True,
+        "anchor_id": anchor.anchor_id,
+        "anchor_phrase": anchor.anchor_phrase,
+        "semantic_hash": anchor.semantic_hash,
+        "constraint_strength": anchor.constraint_strength,
+        "locked_terms": anchor.locked_terms,
+        "message": (
+            f"Governor '{anchor.anchor_phrase}' engaged. "
+            f"Constraint strength: {anchor.constraint_strength:.2f}. "
+            f"Nebraska protocol active."
+        ),
+    }
+
+
+@app.get("/api/v1/session/{session_id}/alignment/state")
+async def get_alignment_state(session_id: str):
+    """
+    Get the current cognitive alignment state for a session.
+
+    Returns the latest A/B = Story computation:
+      - alignment_score   : B / (A+B), how well the governor is containing entropy
+      - cognitive_load    : residual entropy the patient must process unassisted
+      - story_coherence   : qualitative label (SOUP → DRIFT → NOISE → SIGNAL → RAILS → ALIGNMENT)
+      - governor_active   : whether the anchor has auto-engaged
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    session = sessions[session_id]
+    engine: cal.CognitiveAlignmentEngine = session.get("alignment_engine")
+    if engine is None:
+        raise HTTPException(500, "Alignment engine not initialised")
+
+    # Compute a fresh state from current session data
+    stimulus = engine.stimulus_from_session(session)
+    state = engine.compute_alignment(stimulus)
+    session["alignment_state"] = state
+
+    return {
+        "session_id": session_id,
+        "alignment": {
+            "score":                state.alignment_score,
+            "cognitive_load":       state.cognitive_load,
+            "story_coherence":      state.story_coherence,
+            "coherence_description": state.coherence_description,
+            "governor_active":      state.governor_active,
+            "drift_score":          state.drift_score,
+            "drift_detected":       state.drift_detected,
+            "timestamp":            state.timestamp,
+        },
+        "stimulus": {
+            "magnitude":            round(stimulus.magnitude, 4),
+            "biometric_entropy":    stimulus.biometric_entropy,
+            "narrative_complexity": stimulus.narrative_complexity,
+            "emotional_variance":   stimulus.emotional_variance,
+            "environmental_noise":  stimulus.environmental_noise,
+        },
+        "governor": {
+            "anchor_phrase":        state.governor.anchor_phrase,
+            "constraint_strength":  state.governor.constraint_strength,
+            "semantic_hash":        state.governor.semantic_hash,
+            "activation_threshold": state.governor.activation_threshold,
+        },
+    }
+
+
+@app.get("/api/v1/session/{session_id}/alignment/trajectory")
+async def get_alignment_trajectory(session_id: str):
+    """
+    Recovery trajectory analytics — Nebraska 1.0 clinical output.
+
+    For stroke / EFD rehabilitation: a positive `recovery_slope` indicates
+    the patient is successfully maintaining the Governor (B) against
+    increasing stimulus entropy (A) — the primary recovery indicator.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+
+    engine: cal.CognitiveAlignmentEngine = sessions[session_id].get("alignment_engine")
+    if engine is None:
+        raise HTTPException(500, "Alignment engine not initialised")
+
+    return {"session_id": session_id, "trajectory": engine.recovery_trajectory()}
+
+
+@app.post("/api/v1/alignment/lexicon/test")
+async def test_lexicon_alignment(req: LexiconTestRequest):
+    """
+    Nebraska 2.0 — Run a Pragmatic Alignment Test against the Deterministic Lexicon.
+
+    Tests whether the input text uses locked vocabulary in its canonical sense.
+    Any term used in a negated or ambiguous context registers as a 'leak' —
+    a point where the patient's cognitive architecture is failing to hold
+    the semantic anchor.
+
+    Clinical use: if the patient cannot align with the fixed lexicon, the
+    leak location pinpoints the exact dimension of cognitive breakdown.
+    """
+    if req.session_id and req.session_id in sessions:
+        engine = sessions[req.session_id].get("alignment_engine")
+    else:
+        engine = cal.create_engine()
+
+    report = engine.test_lexicon_alignment(req.input_text)
+
+    return {
+        "lexicon_test": {
+            "input_text":           report.input_text,
+            "alignment_passed":     report.alignment_passed,
+            "drift_score":          report.drift_score,
+            "interpretive_dof":     report.interpretive_dof,
+            "matched_terms":        report.matched_terms,
+            "drifted_terms":        report.drifted_terms,
+            "leak_locations":       report.leak_locations,
+            "canonical_definitions": report.canonical_definitions,
+        },
+        "diagnosis": (
+            "ALIGNED — lexicon maintained, zero pragmatic drift."
+            if report.alignment_passed and report.interpretive_dof == 0
+            else f"DRIFT DETECTED — {len(report.leak_locations)} leak(s) at: "
+                 + ", ".join(report.leak_locations)
+                 if report.leak_locations
+                 else "INSUFFICIENT_DATA — no locked terms present in input."
+        ),
+    }
+
+
+@app.get("/api/v1/alignment/lexicon")
+async def get_deterministic_lexicon():
+    """
+    Nebraska 2.0 — Return the full Deterministic Lexicon.
+
+    All terms carry interpretive Degrees of Freedom = 0.
+    This is the 'Cognitive Concrete' — the rails that prevent semantic
+    dissolution in both machine and human cognitive systems.
+    """
+    return {
+        "lexicon": DETERMINISTIC_LEXICON,
+        "term_count": len(DETERMINISTIC_LEXICON),
+        "interpretive_dof": 0,
+        "protocol": "Nebraska 2.0",
+        "description": (
+            "A deterministic vocabulary with zero interpretive degrees of freedom. "
+            "Each term maps to exactly one canonical definition. "
+            "Deviation from these definitions constitutes measurable Pragmatic Drift."
+        ),
     }
 
 
