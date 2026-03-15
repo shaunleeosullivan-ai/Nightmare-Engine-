@@ -480,6 +480,12 @@ async def root():
         return HTMLResponse(content=fh.read())
 
 
+@app.get("/audit", response_class=HTMLResponse)
+async def audit():
+    with open("audit.html") as fh:
+        return HTMLResponse(content=fh.read())
+
+
 @app.post("/api/v1/experience/create")
 async def create_experience(req: ExperienceCreateRequest):
     exp_id = f"exp_{uuid.uuid4().hex[:12]}"
