@@ -35,7 +35,15 @@ import uuid
 from collections import Counter
 from typing import Any, Optional
 
-from nebraska_protocols import NebraskaProtocol, FEAR_AXIOMS, DEFAULT_AXIOM
+from nebraska_protocols import (
+    NebraskaProtocol,
+    FEAR_AXIOMS,
+    DEFAULT_AXIOM,
+    FORMULA,
+    CONTRACT,
+    RECURSIVE_LAW,
+    qcs_certification,
+)
 
 import numpy as np
 
@@ -242,26 +250,39 @@ Output ONLY the narrative text — no introduction, explanation, or markdown for
         candidates.append(FALLBACK_FRAGMENTS[alt_idx])
         candidate_names.append("fallback_alt")
 
-    # ── Nebraska Y-axis validation ────────────────────────────────────────────
+    # ── Nebraska validation (Y/Y²/Y³/Fourfold Test) ───────────────────────────
     axiom = session.get("nebraska_axiom", FEAR_AXIOMS.get(fear_type, DEFAULT_AXIOM))
+    narrative_history: list[str] = session.get("narrative_history", [])
     proto = NebraskaProtocol(axiom)
 
     components = proto.x_axis_generate(candidates, candidate_names)
     proto.y_axis_validate(components)
     proto.y2_axis_check(components)
+    proto.y3_axis_integrate(components, narrative_history)
+
+    # Governor check: veto components where Y cannot be derived from established conditions
+    for comp in [c for c in components if c.is_valid()]:
+        if proto.governor(comp):
+            comp.vy = 0
+            comp.rejection_reason = "Governor: Y appears coincidental — not derived from Axiom"
+
+    # Fourfold Test (QCS) on passing components — narrative_history feeds T(z) and M(t)
+    valid = [c for c in components if c.is_valid()]
+    for comp in valid:
+        proto.fourfold_test(comp, narrative_history)
 
     # Update session audit counters
-    valid = [c for c in components if c.is_valid()]
     rejected = [c for c in components if c.vy == 0]
-
     session["nebraska_valid_count"] = session.get("nebraska_valid_count", 0) + len(valid)
     session["nebraska_rejected_count"] = session.get("nebraska_rejected_count", 0) + len(rejected)
 
     if valid:
-        chosen = valid[0]
+        # Choose component with highest QCS
+        chosen = max(valid, key=lambda c: c.qcs if c.qcs >= 0 else 0.0)
         print(
-            f"[NEBRASKA] Y-gate PASS: '{chosen.name}' | "
-            f"X={chosen.x[:30]!r} | Y={chosen.y[:30]!r}"
+            f"[NEBRASKA] PASS: '{chosen.name}' | "
+            f"QCS={chosen.qcs:.3f} ({qcs_certification(chosen.qcs)}) | "
+            f"X={chosen.x[:25]!r} | Y={chosen.y[:25]!r}"
         )
         return chosen.content
 
@@ -273,7 +294,7 @@ Output ONLY the narrative text — no introduction, explanation, or markdown for
             )
 
     print(
-        f"[NEBRASKA] All {len(components)} candidates failed Y-gate under axiom: {axiom!r}. "
+        f"[NEBRASKA] All {len(components)} candidates failed under axiom: {axiom!r}. "
         "Intervention: returning strongest fallback."
     )
     return candidates[0] if candidates else FALLBACK_FRAGMENTS[0]
@@ -784,12 +805,13 @@ Keep it dark, immersive, and pedagogically meaningful."""
         candidate_texts.append(text)
         candidate_names.append(label.lower().replace(" ", "_"))
 
-    # ── Full Nebraska pipeline (Y, Y², Y³, Newton QC) ─────────────────────────
+    # ── Full Nebraska pipeline ────────────────────────────────────────────────
     survivors, qc_report = proto.run_full_pipeline(
         candidates=candidate_texts,
         names=candidate_names,
         premise=premise,
-        apply_z_inversion=False,   # Z-inversion off for real-time generation
+        apply_z_inversion=False,  # Z-inversion off for real-time generation
+        apply_z_proof=True,       # Z-inverted proof: axiom must be load-bearing
     )
 
     print(
@@ -836,10 +858,14 @@ Keep it dark, immersive, and pedagogically meaningful."""
             ],
         },
         "nebraska": {
+            "formula": FORMULA,
             "axiom": axiom,
             "z_premise_valid": z_valid,
+            "z_inverted_proof": qc_report["audit"].get("z_inverted_proof"),
             "components_generated": len(candidate_texts),
             "components_valid": len(survivors),
+            "mean_qcs": qc_report.get("mean_qcs"),
+            "certification": qc_report.get("certification"),
             "qc_pass": qc_report["pass"],
             "audit": qc_report["audit"],
         },
@@ -979,9 +1005,11 @@ async def nebraska_audit(session_id: str):
     validity_rate = round(valid_count / total, 3) if total > 0 else None
 
     return {
+        "formula": FORMULA,
+        "prime_equation": "𝕍ᵧ ≡ T(z) ≡ M(t) ≡ ∇(understanding)",
+        "contract": CONTRACT,
+        "recursive_law": RECURSIVE_LAW,
         "axiom": session.get("nebraska_axiom", DEFAULT_AXIOM),
-        "formula": "a/b = story; story = meaning",
-        "contract": "State the X. Name the Y. Prove the conversion serves the Law. Otherwise, reject.",
         "session_stats": {
             "components_generated": total,
             "components_valid": valid_count,
@@ -990,15 +1018,24 @@ async def nebraska_audit(session_id: str):
             "interventions": session.get("nebraska_intervention_count", 0),
         },
         "last_qc": session.get("nebraska_last_qc"),
+        "universal_narrative_quadrivium": {
+            "Vy": "Validity — X→Y under Axiom (component self-deletes if 0)",
+            "T_z": "Temporal Coherence — T(z)×T(1/z)≥1 (Z-axis: bidirectional, not just guessing)",
+            "M_t": "Memory Consistency — Σ[Patternᵢ×Contextᵢ]/Timeᵢ",
+            "grad": "Learning Gradient — ∇(understanding)≥1 (never regress)",
+            "QCS":  "𝕍ᵧ × T(z) × M(t) × ∇ × S  (multiplicative — any zero zeros all)",
+        },
         "axis_stack": {
-            "x_axis": "Expansion — brainstorm candidates freely under the Axiom",
-            "y_axis": "Primary Gate — 𝕍ᵧ: X→Y under Axiom, or reject",
-            "y2_axis": "Clean Conversions — no vague X, no non-sequitur Y",
-            "y3_axis": "System Coherence — chain composes into unified machine",
-            "z_axis": "Premise Validity — First Thing must carry a deficit",
-            "z_inversion": "Adversarial Flip — remove each component, does logic snap?",
-            "intervention": "Structure Governor — 'No is where structure lives'",
-            "newton_qc": "Final Invariant Checksum — story falls like gravity, every time",
+            "x_axis":     "Expansion — brainstorm candidates freely under the Axiom",
+            "y_axis":     "Primary Gate — 𝕍ᵧ: X→Y under Axiom, or reject",
+            "y2_axis":    "Thematic Rail — dominant theme permeates every atom (not just the ending)",
+            "y3_axis":    "Context Flag — semantic consistency with established narrative memory",
+            "z_axis":     "Premise Validity — First Thing must carry a built-in deficit",
+            "z_inversion":"Adversarial Flip — remove each component, does logic snap?",
+            "z_proof":    "Inverted Proof — remove Axiom; police report remains = system was real",
+            "governor":   "Executive Governance — veto coincidence/convenience, enforce constraint b",
+            "intervention":"Structure Veto — 'No is where structure lives'",
+            "newton_qc":  "Final Invariant Checksum via QCS — story falls like gravity, every time",
         },
     }
 
