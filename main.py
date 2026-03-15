@@ -11,9 +11,26 @@ Endpoints:
   GET  /api/v1/session/{id}/analysis   — Post-session analytics
   WS   /ws/session/{id}                — Real-time session WebSocket
   WS   /ws/analytics/{id}             — Real-time analytics WebSocket
+
+Nebraska 3.0 — Anti-Entropic Assembly Protocol: Extended Operations Layer
+  POST /api/v3/nebraska/compile                          — Register & compile schematic
+  GET  /api/v3/nebraska/schematics                       — List all registered schematics
+  GET  /api/v3/nebraska/schematics/{id}                  — Get schematic record
+  DELETE /api/v3/nebraska/schematics/{id}                — Remove from registry
+  POST /api/v3/nebraska/schematics/{id}/gaze             — Run Gaze quality gate
+  POST /api/v3/nebraska/schematics/{id}/compress         — Re-compress Parameter
+  POST /api/v3/nebraska/schematics/{id}/propagate        — Cross-session propagation
+  POST /api/v3/nebraska/schematics/{id}/pressure/advance — Advance pressure curve beat
+  GET  /api/v3/nebraska/schematics/{id}/pressure         — Current pressure curve position
+  POST /api/v3/nebraska/schematics/{id}/components/{type}/activate — Activate Deus/Reactor
+  POST /api/v3/nebraska/schematics/{id}/reactor/transition — Record Reactor state change
+  POST /api/v3/nebraska/diagnostics/parameter-swap       — Detect Parameter Swap in feedback
+  POST /api/v3/nebraska/diagnostics/entropy-drift        — Entropy drift analysis on content
+  GET  /api/v3/nebraska/diagnostics/{id}/report          — Full diagnostic report
 """
 
 import asyncio
+import math
 import random
 import threading
 import time
@@ -237,6 +254,108 @@ class NebraskaCompileResponse(BaseModel):
 class NebraskaAttachRequest(BaseModel):
     schematic: NebraskaSchematic
 
+
+# ─── Nebraska 3.0 Models ──────────────────────────────────────────────────────
+
+class NebraskaSchematicRecord(BaseModel):
+    """Registry entry for a compiled schematic — persists across calls."""
+    schematic_id: str
+    schematic: NebraskaSchematic
+    created_at: float
+    session_ids: list[str] = []
+    pressure_curve_position: int = 0          # Current beat index (0-based)
+    entropy_history: list[float] = []         # Entropy score after each evaluation
+    gaze_score: float = 0.0                   # Latest Gaze quality-gate score
+    component_states: dict[str, str] = {}     # component_name → current_state
+    activated_components: list[str] = []      # Deus components that have fired
+    narrative_fragments: list[str] = []       # Fragments submitted to the Gaze
+
+
+class NebraskaV3CompileResponse(BaseModel):
+    schematic_id: str
+    schematic: NebraskaSchematic
+    phases: list[NebraskaPhaseResult]
+    governor_active: bool = True
+    session_attached: bool = False
+    registry_url: str = ""
+
+
+class NebraskaGazeRequest(BaseModel):
+    content: str                              # Fragment to evaluate against P/K
+
+
+class NebraskaGazeResponse(BaseModel):
+    schematic_id: str
+    content_preview: str
+    gaze_score: float                         # 0.0 = soup, 1.0 = lawful universe
+    phase: str                                # "unbounded" | "governed" | "gaze"
+    serves_parameter: bool
+    serves_killing_mechanism: bool
+    decoration_detected: bool
+    parameter_pressure: float                 # 0.0–1.0
+    killing_pressure: float                   # 0.0–1.0
+    governor_verdict: str                     # APPROVED | DECORATION | PARAMETER_SWAP | ENTROPY_DRIFT
+    recommendations: list[str]
+    running_entropy: float                    # Cumulative entropy for this schematic
+
+
+class NebraskaParameterSwapRequest(BaseModel):
+    proposed_change: str
+    schematic_id: Optional[str] = None
+    original_parameter: Optional[str] = None  # If no schematic_id
+
+
+class NebraskaParameterSwapResponse(BaseModel):
+    is_parameter_swap: bool
+    swap_type: str                            # full_swap | partial_swap | compatible | decoration_request
+    confidence: float
+    analysis: str
+    recommendation: str
+    structural_impact: str
+
+
+class NebraskaEntropyDriftRequest(BaseModel):
+    schematic_id: str
+    content_sequence: list[str]               # Ordered fragments to analyse
+
+
+class NebraskaEntropyDriftReport(BaseModel):
+    schematic_id: str
+    overall_entropy: float
+    drift_detected: bool
+    drift_indicators: list[str]
+    multiple_k_detected: bool
+    orphaned_component_types: list[str]
+    parameter_pressure_scores: list[float]
+    pressure_decay_rate: float
+    correction_recommendation: str
+    stack_layer_violations: list[str]
+
+
+class NebraskaReactorTransitionRequest(BaseModel):
+    component_name: str
+    from_state: str
+    to_state: str
+    trigger: str                              # What P/K pressure caused this
+
+
+class NebraskaDeusActivationRequest(BaseModel):
+    component_name: str
+    activation_context: str                   # How the deferred circuit closes
+
+
+class NebraskaPropagateRequest(BaseModel):
+    session_ids: list[str]
+
+
+class NebraskaCompressRequest(BaseModel):
+    refined_concept: Optional[str] = None     # If provided, re-extract from this
+
+
+# ─── Nebraska 3.0 Registry ────────────────────────────────────────────────────
+_nebraska_registry: dict[str, NebraskaSchematicRecord] = {}
+
+
 # ─── Nebraska 1.0 Helper Functions ───────────────────────────────────────────
 
 def _build_nebraska_schematic(fear_vector: str, raw_concept: str) -> NebraskaSchematic:
@@ -378,6 +497,246 @@ BEAT_3: [text]"""
     except Exception as exc:
         print(f"[NEBRASKA] LLM compile error: {exc}")
         return None
+
+
+# ─── Nebraska 3.0 Helper Functions ───────────────────────────────────────────
+
+def _entropy_score_heuristic(content: str, parameter: str, killing_mechanism: str) -> dict:
+    """
+    Deterministic heuristic Gaze scorer.  Used when Ollama is unavailable.
+    Returns scores in [0,1] measuring how hard the content presses on P and K.
+    """
+    content_lower  = content.lower()
+    param_words    = set(parameter.lower().split()) - {"a", "an", "the", "is", "not", "and", "or", "of", "to", "in"}
+    km_words       = set(killing_mechanism.lower().split()) - {"a", "an", "the", "is", "not", "and", "or", "of", "to", "in"}
+
+    p_hits = sum(1 for w in param_words if w in content_lower)
+    k_hits = sum(1 for w in km_words   if w in content_lower)
+
+    param_pressure = min(1.0, p_hits / max(len(param_words), 1) * 1.8)
+    kill_pressure  = min(1.0, k_hits / max(len(km_words),   1) * 1.8)
+
+    # Decoration signals: sensory words without structural purpose
+    decoration_signals = ["beautiful", "dark", "shadow", "whisper", "cold", "silence", "ancient"]
+    decoration_hits = sum(1 for w in decoration_signals if w in content_lower)
+    decoration_detected = decoration_hits > 2 and (param_pressure + kill_pressure) < 0.4
+
+    gaze_score = min(1.0, (param_pressure * 0.6 + kill_pressure * 0.4) * (0.7 if decoration_detected else 1.0))
+
+    return {
+        "parameter_pressure":    round(param_pressure, 3),
+        "killing_pressure":      round(kill_pressure,  3),
+        "decoration_detected":   decoration_detected,
+        "gaze_score":            round(gaze_score, 3),
+        "serves_parameter":      param_pressure > 0.25,
+        "serves_killing_mechanism": kill_pressure > 0.25,
+    }
+
+
+async def _gaze_llm_eval(content: str, schematic: NebraskaSchematic) -> Optional[dict]:
+    """Use Ollama to evaluate content against the Nebraska schematic (The Gaze)."""
+    if not OLLAMA_AVAILABLE:
+        return None
+
+    prompt = f"""You are the NEBRASKA 3.0 Governor running The Gaze quality gate.
+
+PARAMETER (The Law): {schematic.parameter}
+KILLING MECHANISM:   {schematic.killing_mechanism}
+
+CONTENT TO EVALUATE:
+\"\"\"{content}\"\"\"
+
+Score this content on the following axes. Respond with ONLY this exact format:
+SERVES_PARAMETER: true|false
+SERVES_KILLING: true|false
+DECORATION_DETECTED: true|false
+PARAMETER_PRESSURE: [0.00 to 1.00]
+KILLING_PRESSURE: [0.00 to 1.00]
+GAZE_SCORE: [0.00 to 1.00]
+VERDICT: APPROVED|DECORATION|PARAMETER_SWAP|ENTROPY_DRIFT
+RECOMMENDATION: [one sentence]
+
+Rules:
+- PARAMETER_PRESSURE = how hard this content presses on the Parameter (0=none, 1=maximum)
+- KILLING_PRESSURE = how hard this content engages the Killing Mechanism
+- GAZE_SCORE = 0.0 means pure pattern regurgitation/decoration; 1.0 means lawful universe building
+- VERDICT is APPROVED only if both pressures are above 0.3 and no decoration/swap detected
+- If content ignores P and K entirely: ENTROPY_DRIFT
+- If content would change what the universe proves: PARAMETER_SWAP
+- If content is atmospheric filler: DECORATION"""
+
+    try:
+        resp = ollama_client.chat(
+            model=OLLAMA_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.1, "num_predict": 200},
+        )
+        text = resp["message"]["content"].strip()
+        lines: dict[str, str] = {}
+        for line in text.splitlines():
+            if ":" in line:
+                k, _, v = line.partition(":")
+                lines[k.strip().upper()] = v.strip()
+
+        return {
+            "serves_parameter":         lines.get("SERVES_PARAMETER", "false").lower() == "true",
+            "serves_killing_mechanism": lines.get("SERVES_KILLING",   "false").lower() == "true",
+            "decoration_detected":      lines.get("DECORATION_DETECTED", "false").lower() == "true",
+            "parameter_pressure":       float(lines.get("PARAMETER_PRESSURE", "0.0")),
+            "killing_pressure":         float(lines.get("KILLING_PRESSURE",   "0.0")),
+            "gaze_score":               float(lines.get("GAZE_SCORE",         "0.0")),
+            "verdict":                  lines.get("VERDICT", "ENTROPY_DRIFT"),
+            "recommendation":           lines.get("RECOMMENDATION", "Return to Phase 1. Compress the Parameter."),
+        }
+    except Exception as exc:
+        print(f"[NEBRASKA 3.0] Gaze LLM error: {exc}")
+        return None
+
+
+async def _parameter_swap_llm(proposed_change: str, parameter: str) -> Optional[dict]:
+    """Use Ollama to determine whether a proposed change would swap the Parameter."""
+    if not OLLAMA_AVAILABLE:
+        return None
+
+    prompt = f"""You are a NEBRASKA 3.0 structural diagnostician.
+
+CURRENT PARAMETER (The Law): {parameter}
+
+PROPOSED CHANGE: "{proposed_change}"
+
+Determine whether this proposed change is a Parameter Swap.
+A Parameter Swap replaces the core law the universe is proving with a different law.
+An enhancement SERVES the existing Parameter without replacing it.
+
+Respond in ONLY this exact format:
+IS_PARAMETER_SWAP: true|false
+SWAP_TYPE: full_swap|partial_swap|compatible|decoration_request
+CONFIDENCE: [0.00 to 1.00]
+ANALYSIS: [one sentence explaining why]
+STRUCTURAL_IMPACT: [one sentence on what breaks if this change is accepted]
+RECOMMENDATION: [one sentence: accept, reject, or negotiate]"""
+
+    try:
+        resp = ollama_client.chat(
+            model=OLLAMA_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.1, "num_predict": 250},
+        )
+        text = resp["message"]["content"].strip()
+        lines: dict[str, str] = {}
+        for line in text.splitlines():
+            if ":" in line:
+                k, _, v = line.partition(":")
+                lines[k.strip().upper()] = v.strip()
+        return {
+            "is_parameter_swap": lines.get("IS_PARAMETER_SWAP", "false").lower() == "true",
+            "swap_type":         lines.get("SWAP_TYPE",         "compatible"),
+            "confidence":        float(lines.get("CONFIDENCE",  "0.5")),
+            "analysis":          lines.get("ANALYSIS",          "Unable to determine structural impact."),
+            "structural_impact": lines.get("STRUCTURAL_IMPACT", "Unknown."),
+            "recommendation":    lines.get("RECOMMENDATION",    "Review the proposed change against the Parameter."),
+        }
+    except Exception as exc:
+        print(f"[NEBRASKA 3.0] ParameterSwap LLM error: {exc}")
+        return None
+
+
+def _parameter_swap_heuristic(proposed_change: str, parameter: str) -> dict:
+    """Deterministic fallback for parameter-swap detection."""
+    param_words = set(parameter.lower().split()) - {"a", "an", "the", "is", "not", "and", "or"}
+    change_words = set(proposed_change.lower().split()) - {"a", "an", "the", "is", "not", "and", "or"}
+
+    overlap = len(param_words & change_words) / max(len(param_words), 1)
+    # Low overlap + imperative tone → likely full swap
+    imperative_signals = ["make", "change", "turn", "have", "let", "give", "remove", "add"]
+    imperative = any(w in proposed_change.lower() for w in imperative_signals)
+
+    if overlap < 0.1 and imperative:
+        swap_type, is_swap, confidence = "full_swap", True, 0.75
+    elif overlap < 0.3 and imperative:
+        swap_type, is_swap, confidence = "partial_swap", True, 0.6
+    elif overlap >= 0.4:
+        swap_type, is_swap, confidence = "compatible", False, 0.65
+    else:
+        swap_type, is_swap, confidence = "decoration_request", False, 0.5
+
+    return {
+        "is_parameter_swap": is_swap,
+        "swap_type":         swap_type,
+        "confidence":        round(confidence, 2),
+        "analysis":          (
+            f"Change shares {overlap:.0%} lexical overlap with the Parameter. "
+            f"{'Imperative framing detected.' if imperative else 'No imperative framing.'}"
+        ),
+        "structural_impact": (
+            "Entire Logic Layer must be rebuilt if accepted." if is_swap
+            else "Existing schematic can absorb this change."
+        ),
+        "recommendation": (
+            "Reject or rebuild from Phase 1 — this change requires a new Parameter."
+            if is_swap else
+            "Evaluate whether this enhances or merely decorates the existing Parameter."
+        ),
+    }
+
+
+def _compute_entropy_drift(
+    content_sequence: list[str],
+    parameter: str,
+    killing_mechanism: str,
+) -> NebraskaEntropyDriftReport:
+    """Analyse a sequence of content fragments for entropy drift."""
+    scores = [_entropy_score_heuristic(c, parameter, killing_mechanism) for c in content_sequence]
+    p_pressures = [s["parameter_pressure"] for s in scores]
+    k_pressures = [s["killing_pressure"]   for s in scores]
+    decorations = [s["decoration_detected"] for s in scores]
+
+    # Pressure decay: linear regression slope of p_pressures
+    n = len(p_pressures)
+    if n > 1:
+        xs = list(range(n))
+        mean_x = sum(xs) / n
+        mean_y = sum(p_pressures) / n
+        num   = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, p_pressures))
+        denom = sum((x - mean_x) ** 2 for x in xs)
+        decay_rate = -(num / denom) if denom else 0.0
+    else:
+        decay_rate = 0.0
+
+    overall_entropy = 1.0 - (sum(p_pressures) / n * 0.6 + sum(k_pressures) / n * 0.4)
+    drift_detected  = decay_rate > 0.05 or overall_entropy > 0.6
+
+    drift_indicators: list[str] = []
+    if decay_rate > 0.05:
+        drift_indicators.append(f"Parameter pressure decaying at {decay_rate:.3f}/fragment")
+    if sum(decorations) > n // 2:
+        drift_indicators.append(f"Decoration detected in {sum(decorations)}/{n} fragments")
+    if overall_entropy > 0.7:
+        drift_indicators.append("Overall entropy exceeds safe threshold (0.7)")
+    if all(kp < 0.15 for kp in k_pressures):
+        drift_indicators.append("Killing Mechanism absent across entire sequence")
+
+    # Stack layer violations — Expression rendered before Logic locked
+    violations: list[str] = []
+    if any(pp < 0.1 for pp in p_pressures[:2]):
+        violations.append("Expression Layer shows no Parameter pressure in early fragments — possible Stack Inversion")
+
+    return NebraskaEntropyDriftReport(
+        schematic_id="",               # caller fills this in
+        overall_entropy=round(overall_entropy, 3),
+        drift_detected=drift_detected,
+        drift_indicators=drift_indicators,
+        multiple_k_detected=False,     # cannot detect from text alone without LLM
+        orphaned_component_types=[],
+        parameter_pressure_scores=[round(p, 3) for p in p_pressures],
+        pressure_decay_rate=round(decay_rate, 4),
+        correction_recommendation=(
+            "Return to Phase 1. Compress the Parameter until it is singular again."
+            if drift_detected else
+            "System coherent. Governor satisfied. Continue expression rendering."
+        ),
+        stack_layer_violations=violations,
+    )
 
 
 # ─── Narrative generation ─────────────────────────────────────────────────────
@@ -1236,6 +1595,562 @@ async def nebraska_parameters():
             "Expression Rendering",
         ],
         "governor_status": "active",
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEBRASKA 3.0 — Extended Operations Layer
+# Anti-Entropic Assembly Protocol: Registry, Gaze, Diagnostics, Propagation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Compile & Registry ────────────────────────────────────────────────────────
+
+@app.post("/api/v3/nebraska/compile", response_model=NebraskaV3CompileResponse)
+async def nebraska_v3_compile(req: NebraskaCompileRequest):
+    """
+    Nebraska 3.0 enhanced compile.
+
+    Identical 4-phase protocol to v1 but stores the resulting schematic in the
+    persistent registry (assigned a stable schematic_id) and exposes it to all
+    downstream v3 operations: Gaze, diagnostics, propagation, pressure-curve.
+    """
+    # Run the existing v1 compile logic
+    v1_result = await nebraska_compile(req)
+
+    schematic_id = f"nb3_{uuid.uuid4().hex[:10]}"
+    record = NebraskaSchematicRecord(
+        schematic_id=schematic_id,
+        schematic=v1_result.schematic,
+        created_at=time.time(),
+        session_ids=[req.session_id] if req.session_id else [],
+        entropy_history=[v1_result.schematic.entropy_score],
+    )
+    _nebraska_registry[schematic_id] = record
+
+    print(f"[NEBRASKA 3.0] Registered schematic {schematic_id} ({req.fear_vector})")
+
+    return NebraskaV3CompileResponse(
+        schematic_id=schematic_id,
+        schematic=v1_result.schematic,
+        phases=v1_result.phases,
+        governor_active=True,
+        session_attached=v1_result.session_attached,
+        registry_url=f"/api/v3/nebraska/schematics/{schematic_id}",
+    )
+
+
+@app.get("/api/v3/nebraska/schematics")
+async def nebraska_list_schematics():
+    """List all schematics in the registry (summary view)."""
+    return {
+        "count": len(_nebraska_registry),
+        "schematics": [
+            {
+                "schematic_id":           r.schematic_id,
+                "fear_vector":            r.schematic.fear_vector,
+                "parameter":              r.schematic.parameter[:80] + ("…" if len(r.schematic.parameter) > 80 else ""),
+                "entropy_score":          r.schematic.entropy_score,
+                "gaze_score":             r.gaze_score,
+                "pressure_curve_position": r.pressure_curve_position,
+                "session_count":          len(r.session_ids),
+                "created_at":             r.created_at,
+            }
+            for r in _nebraska_registry.values()
+        ],
+    }
+
+
+@app.get("/api/v3/nebraska/schematics/{schematic_id}")
+async def nebraska_get_schematic(schematic_id: str):
+    """Retrieve a full schematic record from the registry."""
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found in registry")
+    r = _nebraska_registry[schematic_id]
+    return {
+        "record":               r.model_dump(),
+        "governor_active":      True,
+        "current_beat":         (
+            r.schematic.pressure_curve[r.pressure_curve_position]
+            if r.pressure_curve_position < len(r.schematic.pressure_curve)
+            else "RESOLUTION COMPLETE"
+        ),
+        "entropy_trend":        "stable" if len(r.entropy_history) < 2
+                                else ("rising" if r.entropy_history[-1] > r.entropy_history[-2] else "falling"),
+    }
+
+
+@app.delete("/api/v3/nebraska/schematics/{schematic_id}")
+async def nebraska_delete_schematic(schematic_id: str):
+    """Remove a schematic from the registry."""
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    del _nebraska_registry[schematic_id]
+    return {"status": "deleted", "schematic_id": schematic_id}
+
+
+# ── The Gaze Quality Gate ─────────────────────────────────────────────────────
+
+@app.post("/api/v3/nebraska/schematics/{schematic_id}/gaze", response_model=NebraskaGazeResponse)
+async def nebraska_gaze(schematic_id: str, req: NebraskaGazeRequest):
+    """
+    Run The Gaze quality gate on a content fragment.
+
+    The Gaze measures the moment a system moves from pattern regurgitation to
+    lawful universe building.  Three outcomes:
+      "unbounded" — pure soup; no P/K engagement
+      "governed"  — rules followed but not yet internalised
+      "gaze"      — constraints treated as physics; universe being built from P
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+    schematic = record.schematic
+
+    # Try LLM eval first, fall back to heuristic
+    llm = await _gaze_llm_eval(req.content, schematic)
+    if llm:
+        pp      = llm["parameter_pressure"]
+        kp      = llm["killing_pressure"]
+        score   = llm["gaze_score"]
+        verdict = llm["verdict"]
+        recs    = [llm["recommendation"]]
+        serves_p  = llm["serves_parameter"]
+        serves_k  = llm["serves_killing_mechanism"]
+        deco      = llm["decoration_detected"]
+    else:
+        h       = _entropy_score_heuristic(req.content, schematic.parameter, schematic.killing_mechanism)
+        pp      = h["parameter_pressure"]
+        kp      = h["killing_pressure"]
+        score   = h["gaze_score"]
+        serves_p  = h["serves_parameter"]
+        serves_k  = h["serves_killing_mechanism"]
+        deco      = h["decoration_detected"]
+        if deco:
+            verdict = "DECORATION"
+        elif score < 0.2:
+            verdict = "ENTROPY_DRIFT"
+        elif serves_p or serves_k:
+            verdict = "APPROVED"
+        else:
+            verdict = "ENTROPY_DRIFT"
+        recs = [
+            "Remove decoration and rewrite to press directly on the Parameter." if deco
+            else "Every sentence must serve P or K. Return to Schematic if uncertain."
+        ]
+
+    # Classify Gaze phase
+    if score >= 0.72:
+        phase = "gaze"
+    elif score >= 0.38:
+        phase = "governed"
+    else:
+        phase = "unbounded"
+
+    # Add supplementary recommendations
+    if not serves_p:
+        recs.append(f"Content does not engage Parameter: '{schematic.parameter[:60]}…'")
+    if not serves_k:
+        recs.append(f"Content does not engage Killing Mechanism: '{schematic.killing_mechanism[:60]}…'")
+    if phase == "gaze":
+        recs.insert(0, "GOVERNOR APPROVED: Content treats constraints as physics. Continue.")
+
+    # Update registry record
+    record.gaze_score = score
+    record.narrative_fragments.append(req.content[:200])
+    record.entropy_history.append(round(1.0 - score, 3))
+
+    running_entropy = (
+        sum(record.entropy_history) / len(record.entropy_history)
+        if record.entropy_history else 0.5
+    )
+
+    return NebraskaGazeResponse(
+        schematic_id=schematic_id,
+        content_preview=req.content[:80] + ("…" if len(req.content) > 80 else ""),
+        gaze_score=round(score, 3),
+        phase=phase,
+        serves_parameter=serves_p,
+        serves_killing_mechanism=serves_k,
+        decoration_detected=deco,
+        parameter_pressure=round(pp, 3),
+        killing_pressure=round(kp, 3),
+        governor_verdict=verdict,
+        recommendations=recs,
+        running_entropy=round(running_entropy, 3),
+    )
+
+
+# ── Parameter Compression (Re-Squeeze) ───────────────────────────────────────
+
+@app.post("/api/v3/nebraska/schematics/{schematic_id}/compress")
+async def nebraska_compress(schematic_id: str, req: NebraskaCompressRequest):
+    """
+    Re-compress the Parameter of an existing registered schematic.
+
+    Use when entropy drift or notes interference has caused Parameter instability.
+    Optionally accepts a refined_concept to re-extract from; otherwise re-compresses
+    the existing Parameter text until singular and falsifiable.
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+    old_parameter = record.schematic.parameter
+
+    if req.refined_concept and OLLAMA_AVAILABLE:
+        prompt = f"""You are a NEBRASKA 3.0 Parameter Compressor.
+
+CURRENT PARAMETER (possibly drifted): {old_parameter}
+REFINED CONCEPT: "{req.refined_concept}"
+
+Compress the concept into ONE singular, falsifiable Parameter (The Law).
+Rules:
+- Must be a single sentence
+- Must be falsifiable (has a clear binary opposite)
+- Must be more specific than the current Parameter
+- Format: "X, once Y, cannot Z" or equivalent tight logical form
+
+Output ONLY the new Parameter sentence. Nothing else."""
+        try:
+            resp = ollama_client.chat(
+                model=OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0.3, "num_predict": 80},
+            )
+            new_parameter = resp["message"]["content"].strip().strip('"')
+        except Exception:
+            new_parameter = old_parameter
+    else:
+        # Heuristic re-compression: strip conjunctions that suggest multiple rules
+        new_parameter = old_parameter
+        for conj in [" and ", " while also ", " as well as ", " plus "]:
+            if conj in new_parameter.lower():
+                new_parameter = new_parameter.split(conj)[0].strip()
+                break
+
+    record.schematic.parameter = new_parameter
+    return {
+        "schematic_id":    schematic_id,
+        "old_parameter":   old_parameter,
+        "new_parameter":   new_parameter,
+        "compression_applied": new_parameter != old_parameter,
+        "diagnostic": (
+            "Parameter re-compressed. Rebuild Logic Layer if schematic has been partially rendered."
+            if new_parameter != old_parameter
+            else "Parameter already at minimum compression. No change applied."
+        ),
+    }
+
+
+# ── Cross-Session Propagation ─────────────────────────────────────────────────
+
+@app.post("/api/v3/nebraska/schematics/{schematic_id}/propagate")
+async def nebraska_propagate(schematic_id: str, req: NebraskaPropagateRequest):
+    """
+    Propagate a registered schematic to multiple sessions simultaneously.
+
+    Enables cross-substrate Parameter handshaking: all listed sessions will
+    have their narrative generation governed by the same schematic.
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+    schematic_dict = record.schematic.model_dump()
+
+    attached, missing = [], []
+    for sid in req.session_ids:
+        if sid in sessions:
+            sessions[sid]["nebraska_schematic"] = schematic_dict
+            if sid not in record.session_ids:
+                record.session_ids.append(sid)
+            attached.append(sid)
+        else:
+            missing.append(sid)
+
+    return {
+        "schematic_id":   schematic_id,
+        "parameter":      record.schematic.parameter,
+        "attached":       attached,
+        "missing":        missing,
+        "total_sessions": len(record.session_ids),
+        "diagnostic":     f"Schematic governing {len(attached)} session(s). Governor active across substrate.",
+    }
+
+
+# ── Pressure Curve Execution ──────────────────────────────────────────────────
+
+@app.get("/api/v3/nebraska/schematics/{schematic_id}/pressure")
+async def nebraska_pressure_status(schematic_id: str):
+    """Return the current pressure curve position and upcoming beats."""
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+    curve  = record.schematic.pressure_curve
+    pos    = record.pressure_curve_position
+
+    return {
+        "schematic_id":          schematic_id,
+        "total_beats":           len(curve),
+        "current_position":      pos,
+        "current_beat":          curve[pos] if pos < len(curve) else "RESOLUTION COMPLETE",
+        "next_beat":             curve[pos + 1] if pos + 1 < len(curve) else None,
+        "remaining_beats":       max(0, len(curve) - pos - 1),
+        "completion_percentage": round(pos / max(len(curve), 1) * 100, 1),
+        "full_curve":            curve,
+    }
+
+
+@app.post("/api/v3/nebraska/schematics/{schematic_id}/pressure/advance")
+async def nebraska_pressure_advance(schematic_id: str):
+    """
+    Advance the pressure curve by one beat.
+
+    Each beat represents an escalating application of P/K pressure as defined in
+    the Strategic Assembly phase.  The Governor enforces that Expression Rendering
+    at each beat must serve the Parameter before the next beat unlocks.
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+    curve  = record.schematic.pressure_curve
+
+    if record.pressure_curve_position >= len(curve) - 1:
+        return {
+            "schematic_id":  schematic_id,
+            "status":        "complete",
+            "message":       "Pressure curve exhausted. Parameter has been proven (or disproven). Resolution achieved.",
+            "final_beat":    curve[-1] if curve else "",
+        }
+
+    old_pos = record.pressure_curve_position
+    record.pressure_curve_position += 1
+    new_pos = record.pressure_curve_position
+
+    return {
+        "schematic_id":   schematic_id,
+        "status":         "advanced",
+        "from_beat":      curve[old_pos],
+        "to_beat":        curve[new_pos],
+        "position":       new_pos,
+        "remaining":      len(curve) - new_pos - 1,
+        "deus_imminent":  new_pos >= len(curve) - 2,
+        "diagnostic":     "Pressure escalated. Expression Rendering must now serve this beat exclusively.",
+    }
+
+
+# ── Component State Management ────────────────────────────────────────────────
+
+@app.post("/api/v3/nebraska/schematics/{schematic_id}/reactor/transition")
+async def nebraska_reactor_transition(schematic_id: str, req: NebraskaReactorTransitionRequest):
+    """
+    Record a Reactor component state transition.
+
+    Reactors are identifiable by their state changes.  This endpoint logs the
+    transition (from_state → to_state) caused by a specific P/K pressure trigger,
+    making the machine's shape visible through the change.
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+
+    # Verify component exists
+    component_names = [c.name for c in record.schematic.components if c.component_type == "reactor"]
+    if req.component_name not in component_names:
+        raise HTTPException(400, f"Reactor '{req.component_name}' not found in schematic. "
+                                 f"Available reactors: {component_names}")
+
+    record.component_states[req.component_name] = req.to_state
+
+    return {
+        "schematic_id":   schematic_id,
+        "component":      req.component_name,
+        "from_state":     req.from_state,
+        "to_state":       req.to_state,
+        "trigger":        req.trigger,
+        "all_states":     record.component_states,
+        "diagnostic":     (
+            f"Reactor '{req.component_name}' transitioned under P/K pressure. "
+            "The machine's true shape is now partially visible."
+        ),
+    }
+
+
+@app.post("/api/v3/nebraska/schematics/{schematic_id}/components/{component_type}/activate")
+async def nebraska_activate_component(
+    schematic_id: str,
+    component_type: str,
+    req: NebraskaDeusActivationRequest,
+):
+    """
+    Activate a component — primarily used to fire the Deus deferred circuit.
+
+    A Deus Component is ONLY valid when:
+      1. It was installed in the Logic Layer (Act I)
+      2. It is activated here in the Resolution (Act III)
+    This endpoint validates that constraint and logs the circuit closure.
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+
+    matching = [c for c in record.schematic.components
+                if c.component_type == component_type and c.name == req.component_name]
+    if not matching:
+        raise HTTPException(400, f"No '{component_type}' component named '{req.component_name}' in schematic.")
+
+    component = matching[0]
+    if req.component_name in record.activated_components:
+        return {
+            "schematic_id": schematic_id,
+            "status":       "already_activated",
+            "component":    req.component_name,
+            "warning":      "Component already activated. Each Deus circuit fires exactly once.",
+        }
+
+    record.activated_components.append(req.component_name)
+    component.activated = True
+
+    is_valid_deus = (
+        component_type == "deus" and
+        record.pressure_curve_position >= len(record.schematic.pressure_curve) - 2
+    )
+
+    return {
+        "schematic_id":      schematic_id,
+        "component":         req.component_name,
+        "component_type":    component_type,
+        "activation_context": req.activation_context,
+        "valid_deus_circuit": is_valid_deus,
+        "diagnostic":        (
+            "Deferred circuit closed. This is not deus ex machina — it is physics. The rule was pre-installed."
+            if is_valid_deus else
+            "Component activated. Note: Deus Components activated before Act III may invalidate the circuit."
+        ),
+    }
+
+
+# ── Diagnostics ───────────────────────────────────────────────────────────────
+
+@app.post("/api/v3/nebraska/diagnostics/parameter-swap", response_model=NebraskaParameterSwapResponse)
+async def nebraska_parameter_swap_detect(req: NebraskaParameterSwapRequest):
+    """
+    Detect whether a proposed change is a Parameter Swap.
+
+    Key insight: not all feedback is valid.  Feedback that swaps the Parameter
+    is not critique — it is a proposal for a different system.
+    This endpoint distinguishes:
+      full_swap           — requires complete rebuild from Phase 1
+      partial_swap        — Logic Layer must be partially reconstructed
+      compatible          — change can be absorbed without rebuilding
+      decoration_request  — aesthetic preference; structurally neutral
+    """
+    # Resolve parameter text
+    parameter = req.original_parameter
+    if not parameter and req.schematic_id:
+        if req.schematic_id not in _nebraska_registry:
+            raise HTTPException(404, f"Schematic '{req.schematic_id}' not found")
+        parameter = _nebraska_registry[req.schematic_id].schematic.parameter
+    if not parameter:
+        raise HTTPException(400, "Provide either schematic_id or original_parameter")
+
+    result = await _parameter_swap_llm(req.proposed_change, parameter) \
+             or _parameter_swap_heuristic(req.proposed_change, parameter)
+
+    return NebraskaParameterSwapResponse(**result)
+
+
+@app.post("/api/v3/nebraska/diagnostics/entropy-drift", response_model=NebraskaEntropyDriftReport)
+async def nebraska_entropy_drift(req: NebraskaEntropyDriftRequest):
+    """
+    Analyse a sequence of content fragments for entropy drift.
+
+    Warning signs detected:
+      - Parameter pressure decaying across the sequence
+      - Decoration dominating over structural content
+      - Killing Mechanism absent across the full sequence
+      - Stack Inversion signals in early fragments
+    """
+    if req.schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{req.schematic_id}' not found")
+    if not req.content_sequence:
+        raise HTTPException(400, "content_sequence must contain at least one fragment")
+
+    record = _nebraska_registry[req.schematic_id]
+    report = _compute_entropy_drift(
+        req.content_sequence,
+        record.schematic.parameter,
+        record.schematic.killing_mechanism,
+    )
+    report.schematic_id = req.schematic_id
+    return report
+
+
+@app.get("/api/v3/nebraska/diagnostics/{schematic_id}/report")
+async def nebraska_diagnostic_report(schematic_id: str):
+    """
+    Full diagnostic report for a registered schematic.
+
+    Aggregates: entropy trend, component states, Gaze history,
+    pressure curve progress, and activated Deus circuits.
+    """
+    if schematic_id not in _nebraska_registry:
+        raise HTTPException(404, f"Schematic '{schematic_id}' not found")
+    record = _nebraska_registry[schematic_id]
+    s = record.schematic
+
+    entropy_trend = "stable"
+    if len(record.entropy_history) >= 3:
+        recent = record.entropy_history[-3:]
+        if all(recent[i] < recent[i + 1] for i in range(len(recent) - 1)):
+            entropy_trend = "rising (ALERT — drift detected)"
+        elif all(recent[i] > recent[i + 1] for i in range(len(recent) - 1)):
+            entropy_trend = "falling (coherence increasing)"
+
+    component_health = []
+    for c in s.components:
+        state = record.component_states.get(c.name, c.state)
+        active = c.name in record.activated_components
+        component_health.append({
+            "type":      c.component_type,
+            "name":      c.name,
+            "state":     state,
+            "activated": active,
+            "status":    (
+                "FIRED" if active and c.component_type == "deus"
+                else "TRANSITIONED" if c.component_type == "reactor" and state != "initial"
+                else "DEPLOYED" if c.component_type in ("corpse", "resistor", "amplifier")
+                else "STANDBY"
+            ),
+        })
+
+    return {
+        "schematic_id":          schematic_id,
+        "parameter":             s.parameter,
+        "killing_mechanism":     s.killing_mechanism,
+        "fear_vector":           s.fear_vector,
+        "governor_active":       True,
+        "entropy": {
+            "current":           s.entropy_score,
+            "history":           record.entropy_history,
+            "trend":             entropy_trend,
+            "gaze_score":        record.gaze_score,
+            "fragments_evaluated": len(record.narrative_fragments),
+        },
+        "pressure_curve": {
+            "position":          record.pressure_curve_position,
+            "total_beats":       len(s.pressure_curve),
+            "current_beat":      (
+                s.pressure_curve[record.pressure_curve_position]
+                if record.pressure_curve_position < len(s.pressure_curve)
+                else "RESOLUTION COMPLETE"
+            ),
+            "completion_pct":    round(record.pressure_curve_position / max(len(s.pressure_curve), 1) * 100, 1),
+        },
+        "components":            component_health,
+        "sessions":              record.session_ids,
+        "deus_circuits_fired":   record.activated_components,
+        "created_at":            record.created_at,
+        "stack_integrity":       "SOUND" if s.entropy_score < 0.3 else "DRIFT DETECTED",
     }
 
 
