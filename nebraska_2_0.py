@@ -65,7 +65,15 @@ try:
 except ImportError:
     _OLLAMA_AVAILABLE = False
 
+try:
+    import anthropic as _anthropic
+    _CLAUDE_AVAILABLE = True
+except ImportError:
+    _anthropic = None  # type: ignore
+    _CLAUDE_AVAILABLE = False
+
 DEFAULT_MODEL = "llama3.1:8b"
+CLAUDE_MODEL  = "claude-opus-4-6"
 
 # ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -228,6 +236,104 @@ class TransformerAdapter(SubstrateAdapter):
             "substrate_type": self.substrate_type.value,
             "model": self.model,
             "available": self.available,
+        }
+
+
+class ClaudeAdapter(SubstrateAdapter):
+    """
+    Claude API substrate — claude-opus-4-6 with adaptive thinking (primary).
+
+    Maps Nebraska invariants to Claude's internal architecture:
+      𝕍ᵧ (Validity)          → constitutional AI alignment and system-prompt adherence
+      T(z) (Temporal)        → causal masking + KV-cache continuity
+      M(t) (Memory)          → attention over context window
+      ∇ (Learning Gradient)  → adaptive thinking refinement before output
+
+    Adaptive thinking is enabled so Claude allocates reasoning budget dynamically
+    — it thinks more when the narrative conversion is structurally difficult.
+    Streaming via .get_final_message() prevents HTTP timeouts on long generations.
+    """
+    substrate_type = SubstrateType.TRANSFORMER
+
+    def __init__(self, model: str = CLAUDE_MODEL):
+        self.model = model
+        if _CLAUDE_AVAILABLE:
+            self._client = _anthropic.Anthropic()
+            self.available = True
+        else:
+            self._client = None
+            self.available = False
+
+    # ── Candidate generation ──────────────────────────────────────────────────
+
+    def generate(
+        self,
+        potential: str,
+        axiom: str,
+        count: int = 3,
+        context: Optional[dict] = None,
+    ) -> list[str]:
+        if not self.available:
+            return []
+
+        domain = (context or {}).get("domain", "story")
+        history = (context or {}).get("narrative_history", [])
+        history_note = ""
+        if history:
+            last = history[-1][:120]
+            history_note = f"\nPrevious narrative: {last!r}"
+
+        system = (
+            f"You are the Nebraska Generative System — a substrate-agnostic narrative engine.\n"
+            f"Formula: {FORMULA}\n"
+            f"Contract: {CONTRACT}\n"
+            f"Recursive Law: {RECURSIVE_LAW}\n\n"
+            f"Governing Axiom: {axiom}\n"
+            f"Domain: {domain}\n\n"
+            "RULES:\n"
+            "1. Every candidate MUST name a deficit (X) and its resolution (Y).\n"
+            "2. The X→Y conversion must be lawful under the Axiom.\n"
+            "3. Each candidate must advance understanding — never regress (∇ ≥ 1).\n"
+            "4. No coincidence. No convenience. No deus ex machina.\n"
+            "5. If the Axiom is removed, a police-report summary must still hold (Z-Inverted Proof)."
+        )
+
+        prompt = _build_generation_prompt(potential, axiom, domain, count, history_note)
+
+        results: list[str] = []
+        try:
+            with self._client.messages.stream(
+                model=self.model,
+                max_tokens=2048,
+                thinking={"type": "adaptive"},
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                final = stream.get_final_message()
+
+            for block in final.content:
+                if block.type == "text":
+                    # Parse numbered list (1. ... / 2. ... / etc.) or line-separated
+                    for line in block.text.split("\n"):
+                        clean = line.strip().lstrip("0123456789.-–—) ").strip()
+                        if clean and len(clean) > 20 and clean not in results:
+                            results.append(clean)
+                            if len(results) >= count:
+                                break
+                if len(results) >= count:
+                    break
+
+        except Exception as exc:
+            print(f"[NE2.0/Claude] Generation error: {exc}")
+
+        return results[:count]
+
+    def substrate_info(self) -> dict:
+        return {
+            "substrate_type": self.substrate_type.value,
+            "model": self.model,
+            "available": self.available,
+            "thinking": "adaptive",
         }
 
 
@@ -647,7 +753,15 @@ class NebraskaEngine:
         model: str = DEFAULT_MODEL,
         max_improvement_iterations: int = 3,
     ):
-        self.primary_adapter = primary_adapter or TransformerAdapter(model)
+        # Substrate priority: Claude API → Ollama → Template (deterministic)
+        if primary_adapter is not None:
+            self.primary_adapter = primary_adapter
+        else:
+            claude = ClaudeAdapter()
+            if claude.available:
+                self.primary_adapter = claude
+            else:
+                self.primary_adapter = TransformerAdapter(model)
         self.fallback_adapter = TemplateAdapter()
         self.temporal_guardian = TemporalGuardian()
         self.handshake_gen = HandshakeGenerator()

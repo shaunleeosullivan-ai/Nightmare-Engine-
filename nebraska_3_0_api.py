@@ -43,12 +43,20 @@ Run standalone:
 """
 
 import asyncio
+import json
 import time
 import uuid
 from enum import Enum
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+
+try:
+    import anthropic as _anthropic
+    _CLAUDE_AVAILABLE = True
+except ImportError:
+    _anthropic = None  # type: ignore
+    _CLAUDE_AVAILABLE = False
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -1015,6 +1023,524 @@ async def workspace_stream(websocket: WebSocket, workspace_id: str):
         ws["collaborators"].discard(websocket)
 
 
+# ─── Nebraska Agent ──────────────────────────────────────────────────────────
+#
+# The Nebraska Agent is a Claude-powered agentic loop that operates natively
+# inside the Nebraska 2.0 protocol.  It has 5 tools that map directly to the
+# Nebraska axis stack, allowing it to reason about narrative structure, validate
+# components against the Quadrivium, and build multi-component chains.
+#
+# Substrate: claude-opus-4-6 with adaptive thinking.
+# Loop:      manual agentic loop (tool_use → execute → feed back → end_turn).
+# Tools:     nebraska_validate · nebraska_generate · nebraska_handshake
+#            nebraska_workspace_state · nebraska_propose
+#
+# Endpoints:
+#   POST /v3/agent/run/{workspace_id}  — workspace-scoped agent task
+#   POST /v3/agent/chat                — freeform Nebraska Agent conversation
+
+_AGENT_SYSTEM = f"""You are the Nebraska Narrative Agent — a specialist in the
+Nebraska Generative System (NGS) operating inside a Nebraska 3.0 workspace.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORMULA    : {FORMULA}
+CONTRACT   : {CONTRACT}
+RECURSIVE  : {RECURSIVE_LAW}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+UNIVERSAL NARRATIVE QUADRIVIUM (the four invariants):
+  𝕍ᵧ — Validity       : X→Y conversion is lawful under the Axiom  (binary gate)
+  T(z) — Temporal     : T(z) × T(1/z) ≥ 1  (bidirectional Z-axis coherence)
+  M(t) — Memory       : patterns align with established narrative memory
+  ∇ — Learning        : understanding must advance, never regress
+
+QCS = 𝕍ᵧ × T(z) × M(t) × ∇ × S   [MULTIPLICATIVE — any zero kills the score]
+
+CERTIFICATION:
+  Platinum  QCS ≥ 0.99  universal coherence
+  Gold      QCS ≥ 0.90  production ready
+  Silver    QCS ≥ 0.80  requires reconciliation
+  Bronze    QCS ≥ 0.70  single-substrate coherence
+  Quarantine QCS < 0.70 substrate quarantine required
+
+PRIME DIRECTIVES:
+  1. No Narrative Without Understanding   — ∇ ≥ 1 always
+  2. No Transmission Without Validation   — QCS ≥ 0.70 always
+  3. No Modification Without Consent      — substrate autonomy preserved
+  4. No Isolation Without Reconciliation  — quarantine includes resolution path
+
+GOVERNOR: You have an executive veto.  Reject any component that resolves by
+coincidence, convenience, or deus ex machina — even if it passes other gates.
+
+YOUR TOOLS:
+  nebraska_validate       — Run the Fourfold Test on any content
+  nebraska_generate       — Generate and validate candidates via the engine
+  nebraska_handshake      — Check the causal chain link A.Y → B.X
+  nebraska_workspace_state — Inspect the current workspace state
+  nebraska_propose        — Commit a validated component to the workspace
+
+OPERATING RULES:
+  • State the X before you commit to any Y.
+  • Use nebraska_validate before proposing any component.
+  • If QCS < 0.70, apply the Governor veto and try again.
+  • Every chain must have validated handshakes.
+  • Z-Inverted Proof: remove the Axiom — a factual summary must still hold.
+"""
+
+_AGENT_TOOLS: list[dict] = [
+    {
+        "name": "nebraska_validate",
+        "description": (
+            "Run the full Nebraska Fourfold Test (𝕍ᵧ, T(z), M(t), ∇) on a piece of content. "
+            "Returns QCS score, certification level, and Governor veto decision. "
+            "Always call this before proposing a component."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The narrative text to validate"
+                },
+                "axiom": {
+                    "type": "string",
+                    "description": "The governing Axiom under which to validate"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Component name/label (for audit trail)",
+                    "default": "agent_component"
+                },
+                "narrative_history": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Prior validated component texts for T(z) and M(t) scoring"
+                },
+            },
+            "required": ["content", "axiom"],
+        },
+    },
+    {
+        "name": "nebraska_generate",
+        "description": (
+            "Generate N validated narrative candidates via the NebraskaEngine. "
+            "The engine runs X→Y→Y²→Y³→Governor→Fourfold Test automatically. "
+            "Returns survivors (QCS-passing components) and the QC report."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "potential": {
+                    "type": "string",
+                    "description": "The premise / potential (the 'a' in a/b)"
+                },
+                "axiom": {
+                    "type": "string",
+                    "description": "The governing Axiom (the 'b' in a/b)"
+                },
+                "domain": {
+                    "type": "string",
+                    "enum": ["story", "strategy", "research", "design", "code"],
+                    "description": "Generation domain"
+                },
+                "count": {
+                    "type": "integer",
+                    "description": "Number of candidates to generate (default 3)",
+                    "default": 3
+                },
+            },
+            "required": ["potential", "axiom"],
+        },
+    },
+    {
+        "name": "nebraska_handshake",
+        "description": (
+            "Validate the causal chain link between two components: A.Y → B.X. "
+            "A valid handshake means A's resolution creates the conditions for B's deficit. "
+            "'Swap them and the logic chain snaps.' Returns causal_strength (Jaccard similarity)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content_a": {"type": "string", "description": "Component A text"},
+                "name_a":    {"type": "string", "description": "Component A name"},
+                "y_a":       {"type": "string", "description": "Component A resolution (Y)"},
+                "content_b": {"type": "string", "description": "Component B text"},
+                "name_b":    {"type": "string", "description": "Component B name"},
+                "x_b":       {"type": "string", "description": "Component B deficit (X)"},
+                "axiom":     {"type": "string", "description": "Governing Axiom"},
+            },
+            "required": ["content_a", "content_b", "axiom"],
+        },
+    },
+    {
+        "name": "nebraska_workspace_state",
+        "description": (
+            "Inspect the current state of a Nebraska workspace: axiom, chain length, "
+            "components, mean QCS, certification, and recent audit trail. "
+            "Use this to orient yourself before taking action."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "The workspace ID to inspect"
+                },
+            },
+            "required": ["workspace_id"],
+        },
+    },
+    {
+        "name": "nebraska_propose",
+        "description": (
+            "Commit a validated component to the workspace chain. "
+            "The component is re-validated through the full axis stack on entry — "
+            "no free passes even from the agent. Returns 'accepted' or 'rejected' + QCS."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workspace_id": {
+                    "type": "string",
+                    "description": "Target workspace ID"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The component text to propose"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Component name (optional)",
+                },
+            },
+            "required": ["workspace_id", "content"],
+        },
+    },
+]
+
+
+def _execute_agent_tool(name: str, tool_input: dict) -> str:
+    """
+    Execute a Nebraska agent tool call and return a JSON-encoded result string.
+    All execution is synchronous (called inside an async handler via run_in_executor
+    or directly — Nebraska protocol methods are CPU-bound, not IO-bound).
+    """
+    try:
+        if name == "nebraska_validate":
+            result = _engine.validate_single(
+                content=tool_input["content"],
+                axiom=tool_input["axiom"],
+                name=tool_input.get("name", "agent_component"),
+                narrative_history=tool_input.get("narrative_history"),
+            )
+            return json.dumps(result)
+
+        elif name == "nebraska_generate":
+            domain = tool_input.get("domain", "story")
+            ctx = {"domain": domain}
+            result = _engine.process(
+                potential=tool_input["potential"],
+                axiom=tool_input["axiom"],
+                count=tool_input.get("count", 3),
+                context=ctx,
+            )
+            # Trim to essential fields to stay within context
+            slim = {
+                "status": result["status"],
+                "survivors_count": result["survivors_count"],
+                "survivors": result["survivors"],
+                "qc": result["qc"],
+                "z_premise_valid": result["z_premise_valid"],
+                "improvement_iterations": result.get("improvement_iterations", 0),
+            }
+            return json.dumps(slim)
+
+        elif name == "nebraska_handshake":
+            from nebraska_protocols import NarrativeComponent
+            comp_a = NarrativeComponent(
+                name=tool_input.get("name_a", "a"),
+                content=tool_input["content_a"],
+                y=tool_input.get("y_a", ""),
+            )
+            comp_b = NarrativeComponent(
+                name=tool_input.get("name_b", "b"),
+                content=tool_input["content_b"],
+                x=tool_input.get("x_b", ""),
+            )
+            # Extract X/Y if not provided
+            proto = NebraskaProtocol(tool_input["axiom"])
+            if not comp_a.y:
+                proto.y_axis_validate([comp_a])
+            if not comp_b.x:
+                proto.y_axis_validate([comp_b])
+            hs = _handshake_gen.generate(comp_a, comp_b, tool_input["axiom"])
+            return json.dumps(hs.to_dict())
+
+        elif name == "nebraska_workspace_state":
+            ws_id = tool_input["workspace_id"]
+            if ws_id not in workspaces:
+                return json.dumps({"error": f"Workspace '{ws_id}' not found"})
+            ws = workspaces[ws_id]
+            mean_qcs = (
+                sum(ws["qcs_scores"]) / len(ws["qcs_scores"])
+                if ws["qcs_scores"] else 0.0
+            )
+            return json.dumps({
+                "workspace_id": ws_id,
+                "domain": ws["domain"],
+                "axiom": ws["axiom"],
+                "premise": ws["premise"][:200],
+                "z_premise_valid": ws["z_premise_valid"],
+                "chain_length": len(ws["chain"]),
+                "components_total": len(ws["components"]),
+                "mean_qcs": round(mean_qcs, 4),
+                "certification": qcs_certification(mean_qcs) if mean_qcs else "Uncertified",
+                "recent_chain": ws["chain"][-3:],
+                "pending_count": len(ws["pending"]),
+                "recent_audit": ws["audit_trail"][-5:],
+            })
+
+        elif name == "nebraska_propose":
+            ws_id = tool_input["workspace_id"]
+            if ws_id not in workspaces:
+                return json.dumps({"error": f"Workspace '{ws_id}' not found"})
+            ws = workspaces[ws_id]
+            content = tool_input["content"]
+            name_str = tool_input.get("name") or f"agent_{len(ws['components']) + 1}"
+
+            result = _engine.validate_single(
+                content=content,
+                axiom=ws["axiom"],
+                name=name_str,
+                narrative_history=ws["narrative_history"],
+            )
+            comp_summary = result["component"]
+
+            if comp_summary.get("valid"):
+                ws["components"].append(comp_summary)
+                ws["chain"].append(comp_summary)
+                ws["narrative_history"].append(content[:200])
+                if comp_summary.get("qcs") is not None:
+                    ws["qcs_scores"].append(comp_summary["qcs"])
+                status = "accepted"
+            else:
+                ws["pending"].append(comp_summary)
+                status = "rejected"
+
+            _log(ws, "agent_propose", {
+                "name": name_str,
+                "status": status,
+                "qcs": result.get("qcs"),
+            })
+
+            return json.dumps({
+                "status": status,
+                "name": name_str,
+                "qcs": result.get("qcs"),
+                "certification": result.get("certification"),
+                "governor_veto": result.get("governor_veto"),
+                "rejection_reason": comp_summary.get("rejection_reason", ""),
+                "chain_length": len(ws["chain"]),
+            })
+
+        else:
+            return json.dumps({"error": f"Unknown tool: {name}"})
+
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
+async def _run_nebraska_agent(
+    task: str,
+    workspace_id: Optional[str],
+    axiom: Optional[str],
+    domain: str = "story",
+    max_turns: int = 10,
+) -> dict:
+    """
+    Nebraska Agent agentic loop using claude-opus-4-6 + adaptive thinking.
+
+    Loop:
+      1. Send task + Nebraska system prompt to Claude with 5 Nebraska tools
+      2. If stop_reason == 'tool_use': execute tools, feed results back
+      3. Repeat until stop_reason == 'end_turn' or max_turns reached
+    """
+    if not _CLAUDE_AVAILABLE:
+        return {
+            "error": "Anthropic SDK not available. Install with: pip install anthropic",
+            "agent_available": False,
+        }
+
+    client = _anthropic.AsyncAnthropic()
+
+    # Build initial context for the agent
+    context_note = ""
+    if workspace_id and workspace_id in workspaces:
+        ws = workspaces[workspace_id]
+        context_note = (
+            f"\nACTIVE WORKSPACE: {workspace_id}\n"
+            f"Domain: {ws['domain']} | Axiom: {ws['axiom']}\n"
+            f"Chain length: {len(ws['chain'])} | "
+            f"Mean QCS: {round(sum(ws['qcs_scores'])/max(1,len(ws['qcs_scores'])),3) if ws['qcs_scores'] else 'N/A'}"
+        )
+    if axiom:
+        context_note += f"\nGoverning Axiom: {axiom}"
+
+    user_message = task
+    if context_note:
+        user_message = f"{context_note}\n\n{task}"
+
+    messages: list[dict] = [{"role": "user", "content": user_message}]
+
+    tool_calls_log: list[dict] = []
+    turn = 0
+    final_text = ""
+
+    while turn < max_turns:
+        turn += 1
+
+        # Stream with adaptive thinking for deep narrative reasoning
+        async with client.messages.stream(
+            model="claude-opus-4-6",
+            max_tokens=4096,
+            thinking={"type": "adaptive"},
+            system=_AGENT_SYSTEM,
+            tools=_AGENT_TOOLS,
+            messages=messages,
+        ) as stream:
+            response = await stream.get_final_message()
+
+        # Collect text from this turn
+        for block in response.content:
+            if hasattr(block, "type") and block.type == "text":
+                final_text = block.text
+
+        if response.stop_reason == "end_turn":
+            break
+
+        if response.stop_reason != "tool_use":
+            # Unexpected stop — return what we have
+            break
+
+        # Extract all tool use blocks
+        tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+
+        # Append assistant's full response (including tool_use blocks)
+        messages.append({"role": "assistant", "content": response.content})
+
+        # Execute tools (CPU-bound Nebraska protocol — run in thread pool)
+        tool_results = []
+        for tool_block in tool_use_blocks:
+            tool_result_content = await asyncio.get_event_loop().run_in_executor(
+                None, _execute_agent_tool, tool_block.name, tool_block.input
+            )
+            tool_calls_log.append({
+                "turn": turn,
+                "tool": tool_block.name,
+                "input": tool_block.input,
+                "result_preview": tool_result_content[:200],
+            })
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tool_block.id,
+                "content": tool_result_content,
+            })
+
+        # Feed all results back as a user message
+        messages.append({"role": "user", "content": tool_results})
+
+    return {
+        "agent": "nebraska-opus-4-6",
+        "turns": turn,
+        "workspace_id": workspace_id,
+        "final_response": final_text,
+        "tool_calls": tool_calls_log,
+        "tool_calls_count": len(tool_calls_log),
+        "stop_reason": response.stop_reason if turn > 0 else "no_turns",
+    }
+
+
+# ─── Agent request models ─────────────────────────────────────────────────────
+
+class AgentRunRequest(BaseModel):
+    task: str
+    max_turns: int = 10
+
+class AgentChatRequest(BaseModel):
+    task: str
+    axiom: Optional[str] = None
+    domain: Domain = Domain.STORY
+    max_turns: int = 10
+
+
+# ─── Agent endpoints ──────────────────────────────────────────────────────────
+
+@app.post("/v3/agent/run/{workspace_id}", summary="Run Nebraska Agent on a workspace")
+async def agent_run(workspace_id: str, req: AgentRunRequest):
+    """
+    Run the Nebraska Agent against an existing workspace.
+
+    The agent has full access to the workspace via its tools:
+      • nebraska_workspace_state — read workspace state
+      • nebraska_validate        — validate any content through Fourfold Test
+      • nebraska_generate        — generate candidates via the engine
+      • nebraska_handshake       — verify A.Y → B.X chain links
+      • nebraska_propose         — commit validated components to the chain
+
+    The agent operates under the Nebraska Prime Directives and the workspace
+    Axiom.  It will refuse to propose components that fail the Quadrivium.
+
+    Model: claude-opus-4-6 with adaptive thinking (𝕍ᵧ ≡ T(z) ≡ M(t) ≡ ∇).
+    """
+    _get_workspace(workspace_id)   # 404 guard
+
+    result = await _run_nebraska_agent(
+        task=req.task,
+        workspace_id=workspace_id,
+        axiom=None,
+        max_turns=req.max_turns,
+    )
+
+    # Broadcast to any connected WebSocket clients
+    await _broadcast(workspace_id, {
+        "event": "agent_run",
+        "task": req.task[:80],
+        "tool_calls_count": result["tool_calls_count"],
+        "turns": result["turns"],
+    })
+
+    return result
+
+
+@app.post("/v3/agent/chat", summary="Freeform Nebraska Agent conversation")
+async def agent_chat(req: AgentChatRequest):
+    """
+    Talk to the Nebraska Agent without a workspace.
+
+    Use this for:
+      • Axiom extraction and critique
+      • Narrative structure analysis
+      • Quadrivium reasoning (is this X→Y lawful?)
+      • Nebraska protocol questions
+      • Standalone generation and validation
+
+    The agent can still call nebraska_validate, nebraska_generate, and
+    nebraska_handshake.  It cannot use nebraska_propose or
+    nebraska_workspace_state without a real workspace ID.
+
+    Model: claude-opus-4-6 with adaptive thinking.
+    """
+    result = await _run_nebraska_agent(
+        task=req.task,
+        workspace_id=None,
+        axiom=req.axiom,
+        domain=req.domain.value,
+        max_turns=req.max_turns,
+    )
+    return result
+
+
 # ─── Root ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", summary="Nebraska 3.0 Creative Suite")
@@ -1028,11 +1554,21 @@ async def root():
         "recursive_law": RECURSIVE_LAW,
         "domains": [d.value for d in Domain],
         "quick_start": [
-            "POST /v3/workspace/create   — start with a premise and domain",
-            "POST /v3/workspace/{id}/generate — AI-generate validated components",
-            "POST /v3/workspace/{id}/propose  — add your own components",
-            "GET  /v3/workspace/{id}/audit    — inspect the audit trail",
-            "GET  /v3/workspace/{id}/export   — export the validated narrative",
+            "POST /v3/workspace/create            — start with a premise and domain",
+            "POST /v3/workspace/{id}/generate     — AI-generate validated components",
+            "POST /v3/workspace/{id}/propose      — add your own components",
+            "GET  /v3/workspace/{id}/audit        — inspect the audit trail",
+            "GET  /v3/workspace/{id}/export       — export the validated narrative",
         ],
+        "agent": {
+            "model": "claude-opus-4-6",
+            "thinking": "adaptive",
+            "available": _CLAUDE_AVAILABLE,
+            "endpoints": [
+                "POST /v3/agent/run/{workspace_id} — Nebraska Agent on a workspace",
+                "POST /v3/agent/chat               — Freeform Nebraska Agent chat",
+            ],
+            "tools": [t["name"] for t in _AGENT_TOOLS],
+        },
         "engine_status": "/v3/engine/status",
     }
