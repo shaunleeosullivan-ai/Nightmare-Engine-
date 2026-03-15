@@ -50,6 +50,13 @@ try:
 except ImportError:
     DEEPFACE_AVAILABLE = False
 
+try:
+    from nebraska_runtime import run_from_dict as nebraska_run_from_dict
+    NEBRASKA_RUNTIME_AVAILABLE = True
+except ImportError:
+    NEBRASKA_RUNTIME_AVAILABLE = False
+    nebraska_run_from_dict = None  # type: ignore
+
 # ─── App ─────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -1328,6 +1335,8 @@ async def nebraska_schematic(req: NebraskaSchematicRequest):
     """
     Phase 2 — Schematic Generation.
     Build the Logic Layer: K, Component Suite, and multi-axial architecture from a locked Parameter.
+    When nebraska_runtime is available the full axis stack (Y, Y2, Y3, Z, Z⁻¹, Newton-Apple QC)
+    runs and its report is included alongside the schematic.
     """
     km_hint = req.killing_mechanism_hint or ""
     # If no K hint provided, derive one from the Parameter
@@ -1347,7 +1356,42 @@ async def nebraska_schematic(req: NebraskaSchematicRequest):
         include_deus=req.include_deus,
     )
 
-    return {
+    # ── Full-axis runtime validation (Nebraska 2.0) ──────────────────────────
+    runtime_report: Optional[dict] = None
+    if NEBRASKA_RUNTIME_AVAILABLE and nebraska_run_from_dict is not None:
+        seeds = [
+            {
+                "id": c.id,
+                "x": c.function,
+                "y": c.name,
+                "kind": c.component_type,
+                "meta": {"status": c.status},
+            }
+            for c in schematic.components
+        ]
+        runtime_payload = {
+            "axiom": {
+                "name": f"Nebraska:{req.domain}",
+                "law": req.parameter,
+                "required_tokens": [],
+                "forbidden_tokens": [],
+                "version": "2.0",
+                "notes": km_dict.get("description", ""),
+            },
+            "seeds": seeds,
+            "options": {
+                "max_expansions_per_seed": 4,
+                "enable_inversion": True,
+                "qc_checksum_enabled": True,
+            },
+            "no_expand": True,  # components already built; just validate
+        }
+        try:
+            runtime_report = nebraska_run_from_dict(runtime_payload)
+        except Exception as exc:  # noqa: BLE001
+            runtime_report = {"error": str(exc), "ok": False}
+
+    response: dict = {
         "phase": 2,
         "protocol": "Schematic Generation",
         "schematic": schematic.model_dump(),
@@ -1361,6 +1405,11 @@ async def nebraska_schematic(req: NebraskaSchematicRequest):
             "Do NOT render prose (Phase 4) until Phase 3 is locked."
         ),
     }
+    if runtime_report is not None:
+        response["axis_stack"] = runtime_report
+        response["newton_apple_checksum"] = runtime_report.get("checksum", "")
+        response["axis_stack_ok"] = runtime_report.get("ok", False)
+    return response
 
 
 @app.post("/api/v1/nebraska/governor/check")
