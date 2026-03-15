@@ -204,6 +204,68 @@
       background: var(--crimson);
       box-shadow: 0 0 6px var(--crimson);
     }
+
+    /* ── Nebraska 1.0 Panel ── */
+    #nebraska-panel {
+      flex-shrink: 0;
+      border: 1px solid #330000;
+      background: #030000;
+      padding: 8px 12px;
+      font-size: 0.78em;
+      display: none;
+    }
+    #nebraska-panel.visible { display: block; }
+    #nebraska-header {
+      color: #660000;
+      letter-spacing: 0.2em;
+      font-size: 0.85em;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #nebraska-governor {
+      color: #440000;
+      font-size: 0.75em;
+    }
+    #nebraska-governor.active { color: #880000; }
+    #nebraska-parameter {
+      color: #994400;
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    #nebraska-km {
+      color: #553300;
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+    #nebraska-components {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .ncomp {
+      font-size: 0.75em;
+      padding: 2px 6px;
+      border: 1px solid #330000;
+      color: #553300;
+    }
+    .ncomp.corpse   { border-color: #550000; color: #770000; }
+    .ncomp.resistor { border-color: #004400; color: #006600; }
+    .ncomp.reactor  { border-color: #334400; color: #556600; }
+    .ncomp.amplifier{ border-color: #440044; color: #660066; }
+    .ncomp.deus     { border-color: #444400; color: #888800; }
+
+    /* ── Nebraska compile button in setup ── */
+    #nebraska-compile-btn {
+      width: 340px;
+      padding: 6px;
+      font-size: 0.8em;
+      letter-spacing: 0.15em;
+      opacity: 0.7;
+    }
+    #nebraska-status { color: #664400; font-size: 0.75em; min-height: 1em; }
   </style>
 </head>
 <body>
@@ -226,6 +288,8 @@
   </select>
 
   <button id="start-btn">ENTER THE NIGHTMARE</button>
+  <button id="nebraska-compile-btn">COMPILE NEBRASKA SCHEMATIC (optional)</button>
+  <div id="nebraska-status"></div>
   <div id="error-msg"></div>
 </div>
 
@@ -255,6 +319,17 @@
   <div class="rdot" id="rd5"></div>
 </div>
 
+<!-- ── Nebraska 1.0 Panel ───────────────────────────────────────────── -->
+<div id="nebraska-panel">
+  <div id="nebraska-header">
+    <span>NEBRASKA 1.0 — GOVERNOR</span>
+    <span id="nebraska-governor">STANDBY</span>
+  </div>
+  <div id="nebraska-parameter">P: —</div>
+  <div id="nebraska-km">K: —</div>
+  <div id="nebraska-components"></div>
+</div>
+
 <div id="narrative">
   <p class="system">The engine awaits your presence...</p>
 </div>
@@ -270,10 +345,11 @@
   const API_BASE  = window.location.origin;
   const WS_BASE   = API_BASE.replace(/^http/, 'ws');
 
-  let ws          = null;
-  let expId       = null;
-  let ambientSound = null;
+  let ws               = null;
+  let expId            = null;
+  let ambientSound     = null;
   let currentIntensity = 0;
+  let nebraskaSchematic = null;  // NEBRASKA 1.0 schematic for current session
 
   // ── Emotion colours ───────────────────────────────────────────────────────
   const EMOTION_COLORS = {
@@ -469,6 +545,51 @@
     input.value = '';
   }
 
+  // ── Nebraska 1.0 Panel ────────────────────────────────────────────────────
+  function renderNebraskaPanel(schematic) {
+    nebraskaSchematic = schematic;
+    const panel = document.getElementById('nebraska-panel');
+    panel.classList.add('visible');
+
+    document.getElementById('nebraska-governor').textContent = 'GOVERNOR ACTIVE';
+    document.getElementById('nebraska-governor').classList.add('active');
+    document.getElementById('nebraska-parameter').textContent = 'P: ' + schematic.parameter;
+    document.getElementById('nebraska-km').textContent = 'K: ' + schematic.killing_mechanism;
+
+    const compEl = document.getElementById('nebraska-components');
+    compEl.innerHTML = '';
+    (schematic.components || []).forEach(c => {
+      const div = document.createElement('div');
+      div.className = 'ncomp ' + c.component_type;
+      div.title = c.function;
+      div.textContent = c.component_type.toUpperCase() + ': ' + c.name;
+      compEl.appendChild(div);
+    });
+  }
+
+  async function compileNebraska(sessionId, fearVector) {
+    const statusEl = document.getElementById('nebraska-status');
+    statusEl.textContent = 'Compiling Nebraska schematic...';
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/nebraska/compile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          raw_concept: `A horror experience centred on ${fearVector} fear`,
+          fear_vector: fearVector,
+          session_id: sessionId || null,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      statusEl.textContent = 'Schematic locked. Governor armed.';
+      return json.schematic;
+    } catch (e) {
+      statusEl.textContent = 'Nebraska compile failed: ' + e.message;
+      return null;
+    }
+  }
+
   // ── Calm button ───────────────────────────────────────────────────────────
   async function triggerCalm() {
     if (!expId) return;
@@ -496,6 +617,14 @@
       // Connect directly
       document.getElementById('setup-overlay').style.display = 'none';
       connect(inputId);
+      // Fetch existing Nebraska schematic if one is attached
+      try {
+        const nr = await fetch(`${API_BASE}/api/v1/session/${inputId}/nebraska`);
+        if (nr.ok) {
+          const nj = await nr.json();
+          if (nj.schematic) renderNebraskaPanel(nj.schematic);
+        }
+      } catch (_) {}
     } else {
       // Create new session
       try {
@@ -525,11 +654,25 @@
 
         document.getElementById('setup-overlay').style.display = 'none';
         connect(json.experience_id);
+
+        // Auto-compile Nebraska schematic for new sessions
+        const schematic = await compileNebraska(json.experience_id, fear);
+        if (schematic) renderNebraskaPanel(schematic);
       } catch (e) {
         errEl.textContent = 'Failed to create session: ' + e.message;
         document.getElementById('start-btn').disabled = false;
         document.getElementById('start-btn').textContent = 'ENTER THE NIGHTMARE';
       }
+    }
+  });
+
+  document.getElementById('nebraska-compile-btn').addEventListener('click', async () => {
+    const fear = document.getElementById('fear-select').value;
+    const statusEl = document.getElementById('nebraska-status');
+    statusEl.textContent = 'Compiling Nebraska schematic (no session yet)...';
+    const schematic = await compileNebraska(null, fear);
+    if (schematic) {
+      statusEl.textContent = `Schematic ready: "${schematic.parameter.slice(0, 60)}..."`;
     }
   });
 
