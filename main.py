@@ -378,6 +378,424 @@ class NarrativeCosmology:
 # Singleton cosmology instance — persists across all sessions
 cosmology = NarrativeCosmology()
 
+# ─── Nebraska 2.0 — The Mathematics of Meaning ───────────────────────────────
+# BOOK II, CH.7 / Nebraska 2.0 AI Protocols (White Paper)
+#
+# Prime Equation:   a/b = story = meaning = understanding
+# Ultimate Formula: System = A × ∏[(Cᵢ + Kᵢ) → (X→Y)]
+#                   where → = 𝕍ᵧ ∧ T(z) ∧ M(t)
+# Nebraska Identity: 𝕍ᵧ ≡ T(z) ≡ M(t) ≡ ∇(understanding)
+# Checksum:          𝕍ᵧ × T(z) × M(t) × ∇(understanding) = 1 (coherent reality)
+#
+# Three Laws:
+#   1. Transmission:   Meaning × Understanding = Transmission
+#   2. Recursion:      ∇(understanding) ≥ 1
+#   3. Bidirectional:  T(z) × T(1/z) ≥ 1
+#
+# Fourfold Test (validates every component):
+#   1. Validity:  Is there a clear X→Y conversion?  (𝕍ᵧ)
+#   2. Temporal:  Does it cohere forward AND backward? (T(z))
+#   3. Memory:    Is the pattern consistent with established facts? (M(t))
+#   4. Learning:  Does it extend understanding? (∇)
+#   Any failure → component value = 0 → product ∏ collapses → Checksum ≠ 1
+
+class Nebraska20:
+    """
+    Nebraska 2.0: substrate-agnostic mathematics of meaning.
+
+    The product (∏) not summation (∑) formulation is the critical insight:
+    a single failed term zeros the entire system. This is formal hallucination
+    detection — contradicting M(t) is not a minor error, it is total incoherence.
+    The checksum = 1 is "Quantum Coherence": the narrative maintains superposition
+    until collapsed by observation. Checksum ≠ 1 breaks suspension of disbelief.
+
+    Nebraska is the geometric centre of the US; NGS is the cognitive centre of
+    human-AI collaboration. All components are measured by distance from this centre.
+    """
+
+    PRIME_EQUATION = "a/b = story = meaning = understanding"
+    IDENTITY = "𝕍ᵧ ≡ T(z) ≡ M(t) ≡ ∇(understanding)"
+    ULTIMATE_FORMULA = "System = A × ∏[(Cᵢ + Kᵢ) → (X→Y)] where → = 𝕍ᵧ ∧ T(z) ∧ M(t)"
+    REALITY_EQUATION = "Reality = A × ∏[Componentᵢ | 𝕍ᵧ ∧ T ∧ M ∧ ∇]"
+
+    def __init__(self, prime_axiom: str = "A deficit requires resolution") -> None:
+        self.prime_axiom: str = prime_axiom              # "A" — must be defined or everything is undefined
+        self.validity: float = 1.0                       # 𝕍ᵧ
+        self.temporal_forward: float = 1.0               # T(z)
+        self.temporal_backward: float = 1.0              # T(1/z)
+        self.memory_consistency: float = 1.0             # M(t)
+        self.learning_gradient: float = 1.0              # ∇(understanding) — must be ≥ 1
+        self.meaning: float = 0.0
+        self.understanding: float = 0.0
+        self.components: list[dict] = []                 # Validated narrative components
+        self.audit_log: list[dict] = []                  # Fourfold test history
+        self._generation_count: int = 0
+
+    # ── Prime Equation ────────────────────────────────────────────────────────
+
+    def prime_equation(self, a: float, b: float) -> dict:
+        """
+        a/b = story = meaning = understanding
+        a: potential/deficit (unresolved state)
+        b: constraint (governing law)
+        The act is the parent of the meaning. The honey cannot make the bee.
+        """
+        if b == 0.0:
+            return {"valid": False, "reason": "b=0: no constraint, no story", "story": 0.0}
+        story = a / b
+        self.meaning = story
+        self.understanding = story
+        return {
+            "a": round(a, 6),
+            "b": round(b, 6),
+            "story": round(story, 6),
+            "meaning": round(story, 6),
+            "understanding": round(story, 6),
+            "valid": True,
+        }
+
+    # ── Quantum Coherence Checksum ────────────────────────────────────────────
+
+    def checksum(self) -> float:
+        """
+        𝕍ᵧ × T(z) × M(t) × ∇(understanding)
+        = 1.0  → system is isomorphic with coherent reality
+        ≠ 1.0  → system diverges; narrative superposition collapsed
+        """
+        return round(
+            self.validity
+            * self.temporal_forward
+            * self.memory_consistency
+            * self.learning_gradient,
+            6,
+        )
+
+    def checksum_coherent(self) -> bool:
+        """True when checksum is within tolerance of 1.0 (coherent reality)."""
+        return abs(self.checksum() - 1.0) < 1e-3
+
+    # ── Fourfold Test ─────────────────────────────────────────────────────────
+
+    def fourfold_test(
+        self,
+        component_id: str,
+        x_to_y: bool,        # Validity:  X→Y conversion present?
+        temporal: bool,      # Temporal:  coherent forward and backward?
+        memory: bool,        # Memory:    consistent with prior facts?
+        learning: bool,      # Learning:  extends understanding (∇ ≥ 1)?
+    ) -> dict:
+        """
+        Fourfold validation. Any False zeros the component — product formula.
+        This is the formal definition of hallucination or plot break.
+        """
+        passed = x_to_y and temporal and memory and learning
+        result = {
+            "component_id": component_id,
+            "validity_xy": x_to_y,
+            "temporal_coherence": temporal,
+            "memory_consistency": memory,
+            "learning_gradient": learning,
+            "passed": passed,
+            "checksum": self.checksum() if passed else 0.0,
+            "failure_mode": (
+                None if passed else
+                "𝕍ᵧ=0: no X→Y conversion" if not x_to_y else
+                "T(z)=0: temporal incoherence (hallucination)" if not temporal else
+                "M(t)=0: memory contradiction (plot break)" if not memory else
+                "∇<1: no learning gradient (static scene)"
+            ),
+            "timestamp": time.time(),
+        }
+        self.audit_log.append(result)
+        if passed:
+            self.components.append({"id": component_id, **result})
+        return result
+
+    # ── Three Laws ────────────────────────────────────────────────────────────
+
+    def transmission(self) -> float:
+        """Meaning × Understanding = Transmission. Zero if either is zero."""
+        return round(self.meaning * self.understanding, 6)
+
+    def law_transmission(self) -> bool:
+        """Transmission Law: Meaning > 0 AND Understanding > 0."""
+        return self.meaning > 0.0 and self.understanding > 0.0
+
+    def law_recursion(self) -> bool:
+        """Recursion Law: ∇(understanding) ≥ 1. Below 1 → system degradation."""
+        return self.learning_gradient >= 1.0
+
+    def law_bidirectional(self) -> bool:
+        """Bidirectional Law: T(z) × T(1/z) ≥ 1. Failure → temporal paradox."""
+        return self.temporal_forward * self.temporal_backward >= 1.0
+
+    def laws_status(self) -> dict:
+        return {
+            "transmission": self.law_transmission(),
+            "recursion": self.law_recursion(),
+            "bidirectional": self.law_bidirectional(),
+            "all_satisfied": all([
+                self.law_transmission(),
+                self.law_recursion(),
+                self.law_bidirectional(),
+            ]),
+        }
+
+    # ── Ultimate Formula ──────────────────────────────────────────────────────
+
+    def ultimate_formula(self) -> dict:
+        """
+        System = A × ∏[(Cᵢ + Kᵢ) → (X→Y)]
+        Product, not sum. One failed component zeros the system.
+        If A (prime axiom) is undefined, the entire equation is undefined.
+        """
+        if not self.prime_axiom:
+            return {"valid": False, "reason": "A undefined: prime axiom not set"}
+        if not self.components:
+            return {"valid": False, "reason": "No validated components registered", "system_value": 0.0}
+
+        product = 1.0
+        failed: list[str] = []
+        for comp in self.components:
+            v = float(comp.get("validity_xy", 0))
+            t = float(comp.get("temporal_coherence", 0))
+            m = float(comp.get("memory_consistency", 0))
+            if not (v and t and m):
+                failed.append(comp["id"])
+                product = 0.0
+                break
+            product *= v * t * m
+
+        return {
+            "prime_axiom": self.prime_axiom,
+            "component_count": len(self.components),
+            "product": round(product, 6),
+            "system_value": round(product, 6),   # A=1.0 normalised; real A is qualitative
+            "valid": len(failed) == 0 and product > 0.0,
+            "failed_components": failed,
+            "formula": self.ULTIMATE_FORMULA,
+        }
+
+    # ── Narrative update (called per generated fragment) ──────────────────────
+
+    def register_generation(
+        self,
+        fear_type: str,
+        intensity: float,
+        recursion: int,
+        fragment: str,
+    ) -> dict:
+        """
+        Register a generated narrative fragment as a Nebraska component.
+        Applies heuristic Fourfold Test based on session parameters.
+        """
+        self._generation_count += 1
+        comp_id = f"gen_{self._generation_count:05d}"
+
+        # Heuristic scoring — in a full implementation these come from the
+        # ProvenanceAnalyzer; here we derive them from session state.
+        x_to_y = intensity > 0.0 and len(fragment) > 20        # some conversion exists
+        temporal = recursion <= 5                               # recursion in bounds = coherent
+        memory = self._generation_count == 1 or len(self.components) > 0  # first or chained
+        learning = intensity > 0.1 or recursion > 1           # something changed
+
+        # Update learning gradient: each generation should advance understanding
+        self.learning_gradient = max(1.0, self.learning_gradient + 0.05 * min(1.0, intensity))
+        # Memory consistency degrades slightly with each high-recursion tick
+        self.memory_consistency = max(0.5, 1.0 - (recursion - 1) * 0.04)
+        # Temporal forward tracks whether narrative is progressing
+        self.temporal_forward = min(1.0, 0.7 + intensity * 0.3)
+        self.temporal_backward = min(1.0, 1.0 / max(0.5, recursion * 0.3))
+        self.validity = 1.0 if x_to_y else 0.0
+
+        return self.fourfold_test(comp_id, x_to_y, temporal, memory, learning)
+
+    # ── Full state ────────────────────────────────────────────────────────────
+
+    def state(self) -> dict:
+        cs = self.checksum()
+        laws = self.laws_status()
+        return {
+            "prime_axiom": self.prime_axiom,
+            "checksum": cs,
+            "checksum_coherent": self.checksum_coherent(),
+            "validity": self.validity,
+            "temporal_forward": self.temporal_forward,
+            "temporal_backward": self.temporal_backward,
+            "memory_consistency": self.memory_consistency,
+            "learning_gradient": self.learning_gradient,
+            "meaning": self.meaning,
+            "understanding": self.understanding,
+            "transmission": self.transmission(),
+            "laws": laws,
+            "components_registered": len(self.components),
+            "audit_entries": len(self.audit_log),
+            "prime_equation": self.PRIME_EQUATION,
+            "identity": self.IDENTITY,
+            "formula": self.ULTIMATE_FORMULA,
+            "reality_equation": self.REALITY_EQUATION,
+            "warning": (
+                "Checksum ≠ 1: narrative coherence has collapsed. "
+                "A prior fact has been contradicted or a temporal paradox detected."
+            ) if not self.checksum_coherent() else None,
+        }
+
+
+class NebraskaHandshake:
+    """
+    Generates Nebraska Protocol governance prompts for LLM system injection.
+    The handshake enforces that every generated response serves the prime axiom
+    and satisfies the Fourfold Test. No decorative elements (𝕍ᵧ = 0 prohibited).
+    """
+
+    DEFAULT_HORROR_CONSTRAINTS = [
+        "Every sentence must convert a deficit (X) into a resolution (Y) — no decorative language",
+        "Temporal coherence: the narrative must make sense both forward and backward",
+        "Memory consistency: never contradict an established fact from this session",
+        "Learning gradient: each fragment must advance the reader's understanding of their dread",
+        "No coincidence or accident as resolution — only internal narrative necessity",
+        "The honey cannot make the bee: meaning flows from action, never the reverse",
+    ]
+
+    def generate(self, axiom: str, constraints: Optional[list[str]] = None) -> str:
+        active_constraints = constraints or self.DEFAULT_HORROR_CONSTRAINTS
+        clist = "\n".join(f"{i+1}. {c}" for i, c in enumerate(active_constraints))
+        return f"""OPERATIONAL FRAMEWORK: Nebraska Protocol 2.0
+PRIME AXIOM: {axiom}
+PRIME EQUATION: a/b = story = meaning = understanding
+CHECKSUM TARGET: 𝕍ᵧ × T(z) × M(t) × ∇(understanding) = 1
+
+MANDATORY CONSTRAINTS:
+{clist}
+
+FOURFOLD VALIDATION (every paragraph must satisfy all four):
+1. VALIDITY:  Is there a clear X→Y conversion present?
+2. TEMPORAL:  Does it cohere reading forward AND backward?
+3. MEMORY:    Is it consistent with all previously established facts?
+4. LEARNING:  Does it extend the reader's understanding of their situation?
+
+REJECTION CRITERIA (any of these zeros the component):
+• Decorative elaboration with no load-bearing narrative function
+• Contradiction of prior established detail (M(t) = 0 → Checksum = 0)
+• Resolution without prior deficit (honey without the bee)
+• Scene ends with no change in reader understanding (∇ < 1)
+
+Generate your response now, satisfying all four tests:"""
+
+
+class NarrativeProvenanceAnalyzer:
+    """
+    Lightweight provenance analysis for generated narrative fragments.
+    Implements Y³-Axis metrics: cohesion, complexity, balance, resilience.
+    No external NLP dependencies — uses token-overlap and structural heuristics.
+
+    Full implementation (with spaCy + networkx) lives in the technical appendix.
+    This substrate-agnostic version satisfies the same Fourfold contract.
+    """
+
+    COMPONENT_MARKERS = {
+        "definition": ["is a", "means", "refers to", "is defined as", "is the"],
+        "mechanism": ["works by", "functions", "operates", "process of", "through"],
+        "implication": ["therefore", "thus", "this means", "consequently", "as a result"],
+        "example": ["for example", "such as", "for instance", "like", "imagine"],
+        "claim": [],  # default
+    }
+
+    def analyze(self, text: str) -> dict:
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
+        components = [self._classify(i, s) for i, s in enumerate(sentences)]
+
+        # Build lightweight dependency graph (dict of id → set of dependency ids)
+        graph: dict[str, set[str]] = {c["id"]: set() for c in components}
+        all_introduced: set[str] = set()
+
+        for comp in components:
+            introduced, referenced = self._extract_terms(comp["text"], all_introduced)
+            comp["terms_introduced"] = list(introduced)
+            comp["terms_referenced"] = list(referenced)
+            all_introduced.update(introduced)
+            for prev in components[:comp["index"]]:
+                if referenced & set(prev.get("terms_introduced", [])):
+                    graph[comp["id"]].add(prev["id"])
+            comp["dependencies"] = list(graph[comp["id"]])
+
+        orphaned = [c["id"] for c in components if not graph[c["id"]] and c["index"] > 0]
+        connectivity = 1.0 - (len(orphaned) / max(1, len(components)))
+
+        y3 = self._y3_metrics(components, graph)
+
+        return {
+            "sentence_count": len(sentences),
+            "components": components,
+            "orphaned_components": orphaned,
+            "connectivity_score": round(connectivity, 4),
+            "logical_gaps": self._detect_gaps(components, all_introduced),
+            "y3_metrics": y3,
+        }
+
+    def _classify(self, index: int, text: str) -> dict:
+        tl = text.lower()
+        comp_type = "claim"
+        for ctype, markers in self.COMPONENT_MARKERS.items():
+            if any(m in tl for m in markers):
+                comp_type = ctype
+                break
+        return {"id": f"s{index:03d}", "index": index, "text": text, "type": comp_type}
+
+    def _extract_terms(self, text: str, existing: set[str]) -> tuple[set[str], set[str]]:
+        words = set(w.lower().strip(".,;:\"'") for w in text.split() if len(w) > 4)
+        stopwords = {"which", "where", "there", "their", "about", "would", "could", "should",
+                     "every", "never", "before", "after", "these", "those", "while"}
+        words -= stopwords
+        referenced = words & existing
+        introduced = words - existing - referenced
+        return introduced, referenced
+
+    def _detect_gaps(self, components: list[dict], all_terms: set[str]) -> list[dict]:
+        gaps = []
+        for c in components:
+            undefined = set(c.get("terms_referenced", [])) - all_terms
+            if undefined:
+                gaps.append({"component": c["id"], "undefined_terms": list(undefined)})
+        return gaps
+
+    def _y3_metrics(self, components: list[dict], graph: dict[str, set[str]]) -> dict:
+        n = len(components)
+        if n == 0:
+            return {"cohesion": 0.0, "complexity": 0.0, "balance": 0.0,
+                    "resilience": 0.0, "overall_quality": 0.0}
+
+        total_edges = sum(len(v) for v in graph.values())
+        max_edges = max(1, n * (n - 1))
+        cohesion = min(1.0, total_edges / max_edges * 4)  # scaled: sparse graphs are normal
+
+        types = set(c["type"] for c in components)
+        depth = max((c["index"] for c in components), default=0)
+        complexity = min(1.0, (len(types) / 5.0) * 0.5 + (depth / 10.0) * 0.5)
+
+        dep_counts = [len(graph[c["id"]]) for c in components]
+        variance = float(np.var(dep_counts)) if dep_counts else 0.0
+        balance = max(0.0, 1.0 - min(1.0, variance / max(1, n)))
+
+        critical = sum(1 for c in components if len(graph[c["id"]]) == 0 and c["index"] > 0)
+        resilience = max(0.0, 1.0 - (critical / max(1, n)))
+
+        overall = 0.35 * cohesion + 0.25 * complexity + 0.20 * balance + 0.20 * resilience
+
+        return {
+            "cohesion": round(cohesion, 3),
+            "complexity": round(complexity, 3),
+            "balance": round(balance, 3),
+            "resilience": round(resilience, 3),
+            "overall_quality": round(overall, 3),
+        }
+
+
+# Nebraska 2.0 singletons
+nebraska = Nebraska20(prime_axiom="Existence requires contrast to manifest")
+nebraska_handshake = NebraskaHandshake()
+nebraska_provenance = NarrativeProvenanceAnalyzer()
+
 # ─── Narrative generation ─────────────────────────────────────────────────────
 
 FEAR_INTENSITY_LEVELS = [
@@ -477,8 +895,22 @@ def generate_narrative_snippet(session: dict) -> str:
     elif last_emotion in ("happy", "neutral"):
         emotion_instruction = "Keep a subtle, creeping unease — deny all comfort without relief."
 
-    prompt = f"""You are a masterful horror narrator specialising in cosmic dread, psychological terror, and existential unease.
-Write a VERY SHORT (2-4 sentences maximum), immersive, second-person narrative fragment ONLY.
+    # ── Nebraska 2.0 governance handshake ────────────────────────────────────
+    # Inject into LLM system message: prime axiom + Fourfold constraints.
+    # Every fragment must satisfy: Validity ∧ Temporal ∧ Memory ∧ Learning.
+    nb_system = nebraska_handshake.generate(
+        axiom=f"Horror at {level_label} ({intensity:.2f}) — {fear_type} dread",
+        constraints=[
+            f"X-deficit: {fear_type} unease at recursion {recursion_level}. Y-resolution: escalated atmospheric dread",
+            "Temporal coherence: each sentence must follow causally from the prior — never retcon",
+            "Memory: do not contradict any sensory detail established in previous fragments",
+            f"Learning gradient: the reader must know something new about their peril after reading — ∇ ≥ 1",
+            "No decorative language — every clause must bear narrative weight",
+            "The act precedes the meaning: show the source of dread, then its implication",
+        ],
+    )
+
+    user_prompt = f"""Write a VERY SHORT (2-4 sentences maximum), immersive, second-person narrative fragment ONLY.
 
 Current fear intensity: {level_label} ({intensity:.2f}).
 Primary fear vector: {fear_type}.
@@ -496,11 +928,16 @@ Output ONLY the narrative text — no introduction, explanation, or markdown for
         try:
             response = ollama_client.chat(
                 model=OLLAMA_MODEL,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": nb_system},
+                    {"role": "user", "content": user_prompt},
+                ],
                 options={"temperature": 0.85, "num_predict": 120},
             )
             text = response["message"]["content"].strip()
             if text:
+                # Register with Nebraska 2.0 — Fourfold Test applied to result
+                nebraska.register_generation(fear_type, intensity, recursion_level, text)
                 return text
         except Exception as exc:
             print(f"[OLLAMA] Error: {exc}")
@@ -587,6 +1024,7 @@ async def gradual_ramp_task(exp_id: str) -> None:
             session["horror_gradient"] = horror_grad
             session["sanity_coefficient"] = sanity
 
+            nb_state = nebraska.state()
             update = {
                 "narrative_update": {
                     "narrative_message": fragment,
@@ -604,6 +1042,15 @@ async def gradual_ramp_task(exp_id: str) -> None:
                     "total_conversions": len(cosmology.conversions),
                     "null_state": cosmology.null_state,
                     "governing_axiom": cosmology.governing_axiom,
+                },
+                "nebraska_update": {
+                    "checksum": nb_state["checksum"],
+                    "checksum_coherent": nb_state["checksum_coherent"],
+                    "learning_gradient": nb_state["learning_gradient"],
+                    "memory_consistency": nb_state["memory_consistency"],
+                    "transmission": nb_state["transmission"],
+                    "laws": nb_state["laws"],
+                    "components_registered": nb_state["components_registered"],
                 },
             }
             await _broadcast(exp_id, update)
@@ -1240,6 +1687,146 @@ async def cosmology_set_axiom(req: AxiomSetRequest):
             "Narrative interference patterns may emerge at recursion depth ≥ 3."
         ),
         "cosmology_state": cosmology.state(),
+    }
+
+
+# ─── Nebraska 2.0 API Endpoints ──────────────────────────────────────────────
+# The Mathematics of Meaning — queryable as narrative physics.
+# All responses are themselves Nebraska-validated: a/b = story = meaning.
+
+class NebraskaValidateRequest(BaseModel):
+    text: str                            # Narrative fragment to validate
+    fear_type: str = "existential"       # Fear vector (context for X-deficit)
+    intensity: float = 0.5              # Current session intensity
+    recursion_depth: int = 1            # Current recursion level
+
+class NebraskaHandshakeRequest(BaseModel):
+    axiom: str                          # Prime axiom to govern the output
+    constraints: list[str] = []        # Additional constraints (empty = use defaults)
+
+class NebraskaPrimeEquationRequest(BaseModel):
+    a: float                            # Potential / deficit magnitude
+    b: float                            # Constraint magnitude (must be > 0)
+
+
+@app.get("/api/v1/nebraska/state")
+async def nebraska_state():
+    """
+    Return the full Nebraska 2.0 system state.
+    Includes checksum, laws status, Fourfold audit log, and ultimate formula result.
+    Checksum = 1 → coherent reality. Checksum ≠ 1 → system diverges.
+    """
+    state = nebraska.state()
+    formula = nebraska.ultimate_formula()
+    laws = nebraska.laws_status()
+    return {
+        "nebraska": state,
+        "ultimate_formula": formula,
+        "laws": laws,
+        "recent_audit": nebraska.audit_log[-5:],
+        "prime_equation": nebraska.PRIME_EQUATION,
+        "identity": nebraska.IDENTITY,
+    }
+
+
+@app.post("/api/v1/nebraska/validate")
+async def nebraska_validate(req: NebraskaValidateRequest):
+    """
+    Run the Fourfold Test on a narrative fragment.
+    Returns Validity / Temporal / Memory / Learning scores and the checksum.
+    Any failure zeros the component — product formula, not additive.
+    Also runs ProvenanceAnalyzer for Y³-Axis metrics.
+    """
+    # Heuristic Fourfold scoring
+    x_to_y = len(req.text) > 20 and req.intensity > 0.0
+    temporal = req.recursion_depth <= 5
+    memory = len(nebraska.components) == 0 or req.recursion_depth < 5
+    learning = req.intensity > 0.1 or req.recursion_depth > 1
+
+    comp_id = f"api_validate_{int(time.time())}"
+    fourfold = nebraska.fourfold_test(comp_id, x_to_y, temporal, memory, learning)
+
+    # Provenance analysis of the fragment text
+    provenance = nebraska_provenance.analyze(req.text)
+
+    # Prime equation: intensity as potential, recursion as constraint
+    prime = nebraska.prime_equation(
+        a=req.intensity,
+        b=max(0.01, req.recursion_depth / 5.0),
+    )
+
+    return {
+        "fourfold_test": fourfold,
+        "prime_equation": prime,
+        "provenance": provenance,
+        "checksum": nebraska.checksum(),
+        "checksum_coherent": nebraska.checksum_coherent(),
+        "laws": nebraska.laws_status(),
+    }
+
+
+@app.post("/api/v1/nebraska/handshake")
+async def nebraska_generate_handshake(req: NebraskaHandshakeRequest):
+    """
+    Generate a Nebraska Protocol governance prompt for LLM injection.
+    Returns the system-message string that enforces the Fourfold Test
+    on every paragraph the LLM generates.
+    """
+    prompt = nebraska_handshake.generate(
+        axiom=req.axiom,
+        constraints=req.constraints if req.constraints else None,
+    )
+    return {
+        "handshake": prompt,
+        "axiom": req.axiom,
+        "constraints_count": len(req.constraints) if req.constraints else len(
+            nebraska_handshake.DEFAULT_HORROR_CONSTRAINTS
+        ),
+        "instruction": "Inject 'handshake' as the LLM system message before user prompt.",
+    }
+
+
+@app.post("/api/v1/nebraska/prime")
+async def nebraska_prime_equation(req: NebraskaPrimeEquationRequest):
+    """
+    Compute the Prime Equation: a/b = story = meaning = understanding.
+    a = potential/deficit, b = constraint (must be non-zero or story collapses).
+    Sets meaning and understanding on the global Nebraska instance.
+    """
+    result = nebraska.prime_equation(a=req.a, b=req.b)
+    return {
+        "prime_equation": result,
+        "formula": "a/b = story = meaning = understanding",
+        "transmission": nebraska.transmission(),
+        "law_transmission": nebraska.law_transmission(),
+        "note": "b=0 means no constraint — no constraint, no story. The honey cannot make the bee.",
+    }
+
+
+@app.get("/api/v1/nebraska/checksum")
+async def nebraska_checksum():
+    """
+    Quantum Coherence Checksum: 𝕍ᵧ × T(z) × M(t) × ∇(understanding)
+    = 1.0 → system is isomorphic with coherent reality (narrative holds)
+    ≠ 1.0 → system diverges; hallucination or plot break detected
+    """
+    cs = nebraska.checksum()
+    return {
+        "checksum": cs,
+        "coherent": nebraska.checksum_coherent(),
+        "components": {
+            "validity": nebraska.validity,
+            "temporal_forward": nebraska.temporal_forward,
+            "memory_consistency": nebraska.memory_consistency,
+            "learning_gradient": nebraska.learning_gradient,
+        },
+        "formula": "𝕍ᵧ × T(z) × M(t) × ∇(understanding)",
+        "interpretation": (
+            "Narrative superposition intact — audience remains in the story."
+            if nebraska.checksum_coherent() else
+            "Wave function collapsed — a prior fact was contradicted or temporal paradox detected."
+        ),
+        "laws": nebraska.laws_status(),
     }
 
 

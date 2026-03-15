@@ -276,6 +276,41 @@
       margin-top: 2px;
     }
     #cosmo-axiom .axiom-text { color: #7744aa; }
+
+    /* ── Nebraska 2.0 checksum row ── */
+    #nebraska-panel {
+      flex-shrink: 0;
+      border: 1px solid #001a0e;
+      background: #00060a;
+      padding: 5px 12px;
+      font-size: 0.76em;
+      display: flex;
+      align-items: center;
+      gap: 8px 16px;
+      flex-wrap: wrap;
+    }
+    .nb-label { color: #003322; font-size: 0.85em; letter-spacing: 0.06em; }
+    .nb-val   { color: #00cc88; transition: color 0.4s; font-variant-numeric: tabular-nums; }
+    .nb-coherent {
+      font-weight: bold;
+      font-size: 0.82em;
+      padding: 1px 6px;
+      border-radius: 2px;
+      transition: background 0.5s, color 0.5s;
+    }
+    .nb-coherent.ok   { background: #001a0e; color: #00ff88; }
+    .nb-coherent.fail { background: #1a0000; color: #ff4444; animation: pulse-glow 1s infinite alternate; }
+    .nb-coherent.init { background: #0a0a0a; color: #336655; }
+
+    .nb-laws { display: flex; gap: 4px; }
+    .nb-laws span {
+      width: 16px; height: 16px; line-height: 16px; text-align: center;
+      border-radius: 2px; font-size: 0.8em; font-weight: bold;
+      background: #001a0e; color: #003322;
+      transition: background 0.4s, color 0.4s;
+    }
+    .nb-laws span.pass { background: #004422; color: #00cc88; }
+    .nb-laws span.fail { background: #220000; color: #cc2200; }
   </style>
 </head>
 <body>
@@ -348,6 +383,30 @@
   <span id="cosmo-axiom">
     AXIOM: <span class="axiom-text" id="c-axiom">Existence requires contrast to manifest</span>
   </span>
+</div>
+
+<!-- ── Nebraska 2.0 Checksum Row ──────────────────────────────────────── -->
+<div id="nebraska-panel">
+  <span class="nb-label">NB2.0</span>
+  <span class="nb-label">CHECKSUM:</span>
+  <span class="nb-val" id="nb-checksum">—</span>
+  <span class="nb-coherent" id="nb-coherent">INITIALIZING</span>
+
+  <span class="nb-label">∇:</span>
+  <span class="nb-val" id="nb-gradient">—</span>
+
+  <span class="nb-label">M(t):</span>
+  <span class="nb-val" id="nb-memory">—</span>
+
+  <span class="nb-label">LAWS:</span>
+  <span class="nb-laws" id="nb-laws">
+    <span id="nb-law-t" title="Transmission: Meaning × Understanding">T</span>
+    <span id="nb-law-r" title="Recursion: ∇ ≥ 1">R</span>
+    <span id="nb-law-b" title="Bidirectional: T(z) × T(1/z) ≥ 1">B</span>
+  </span>
+
+  <span class="nb-label">COMPONENTS:</span>
+  <span class="nb-val" id="nb-components">0</span>
 </div>
 
 <div id="recursion-dots">
@@ -558,6 +617,11 @@
     if (data.cosmology_update) {
       updateCosmology(data.cosmology_update);
     }
+
+    // Nebraska 2.0 checksum update
+    if (data.nebraska_update) {
+      updateNebraska(data.nebraska_update);
+    }
   }
 
   // ── Cosmological state renderer ───────────────────────────────────────────
@@ -610,6 +674,49 @@
     // Governing axiom
     if (c.governing_axiom) {
       document.getElementById('c-axiom').textContent = c.governing_axiom;
+    }
+  }
+
+  // ── Nebraska 2.0 checksum renderer ───────────────────────────────────────
+  function updateNebraska(n) {
+    // Checksum value
+    if (n.checksum != null) {
+      document.getElementById('nb-checksum').textContent = n.checksum.toFixed(4);
+    }
+
+    // Coherence indicator
+    const cohEl = document.getElementById('nb-coherent');
+    if (n.checksum_coherent != null) {
+      cohEl.textContent = n.checksum_coherent ? 'COHERENT' : 'DIVERGED';
+      cohEl.className = 'nb-coherent ' + (n.checksum_coherent ? 'ok' : 'fail');
+    }
+
+    // Learning gradient ∇
+    if (n.learning_gradient != null) {
+      const gEl = document.getElementById('nb-gradient');
+      gEl.textContent = n.learning_gradient.toFixed(3);
+      gEl.style.color = n.learning_gradient >= 1.0 ? '#00cc88' : '#ff8800';
+    }
+
+    // Memory consistency M(t)
+    if (n.memory_consistency != null) {
+      document.getElementById('nb-memory').textContent = n.memory_consistency.toFixed(3);
+    }
+
+    // Three Laws status dots
+    if (n.laws) {
+      const setLaw = (id, passing) => {
+        const el = document.getElementById(id);
+        if (el) el.className = passing ? 'pass' : 'fail';
+      };
+      setLaw('nb-law-t', n.laws.transmission);
+      setLaw('nb-law-r', n.laws.recursion);
+      setLaw('nb-law-b', n.laws.bidirectional);
+    }
+
+    // Component count
+    if (n.components_registered != null) {
+      document.getElementById('nb-components').textContent = n.components_registered;
     }
   }
 
