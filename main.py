@@ -11,6 +11,11 @@ Endpoints:
   GET  /api/v1/session/{id}/analysis   — Post-session analytics
   WS   /ws/session/{id}                — Real-time session WebSocket
   WS   /ws/analytics/{id}             — Real-time analytics WebSocket
+
+Nebraska Generative System (NGS) Endpoints:
+  POST /api/v1/nebraska/validate       — Validate components via 𝕍ᵧ gate
+  POST /api/v1/nebraska/build          — Build a complete NGS system
+  GET  /api/v1/nebraska/axioms         — List built-in horror axioms
 """
 
 import asyncio
@@ -27,6 +32,20 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from nebraska import (
+    Axiom,
+    Component,
+    ComponentType,
+    XState,
+    YState,
+    ZContext,
+    AxisDirection,
+    NebraskaSystem,
+    quick_validate,
+    _serialize_component,
+    _serialize_z,
+)
 
 # ─── Optional imports (graceful fallback if not installed) ───────────────────
 
@@ -776,6 +795,201 @@ async def session_analysis(session_id: str):
             "coping_mechanism": "analytical",
             "resilience_score": round(1.0 - session.get("current_intensity", 0.5), 2),
         },
+    }
+
+
+# ─── Nebraska Generative System (NGS) ────────────────────────────────────────
+
+# Built-in horror axioms that integrate the NGS with the Nightmare Engine
+_HORROR_AXIOMS: dict[str, dict[str, Any]] = {
+    "haunted_space": {
+        "label":    "Haunted Space",
+        "law":      "Every space must convert safety into proven danger.",
+        "question": "Does this place make danger structural rather than decorative?",
+        "domain":   "narrative",
+        "keywords": ["danger", "threat", "safety", "fear", "space", "trap"],
+    },
+    "escalating_dread": {
+        "label":    "Escalating Dread",
+        "law":      "Every element must convert calm into measurable dread.",
+        "question": "Does this element raise the floor of fear, not just spike it?",
+        "domain":   "narrative",
+        "keywords": ["dread", "calm", "tension", "escalation", "unease", "horror"],
+    },
+    "recursive_pedagogy": {
+        "label":    "Recursive Pedagogy",
+        "law":      "Every experience must convert ignorance into recursive understanding.",
+        "question": "Does this teach something that reframes everything that came before?",
+        "domain":   "education",
+        "keywords": ["learn", "understand", "knowledge", "meaning", "insight", "recursive"],
+    },
+    "bio_adaptive_intensity": {
+        "label":    "Bio-Adaptive Intensity",
+        "law":      "Every biometric input must convert physiological state into narrative adaptation.",
+        "question": "Does this biometric signal change the story in a structurally necessary way?",
+        "domain":   "system",
+        "keywords": [
+            "heart_rate", "biometric", "intensity", "adaptation",
+            "fear", "physiological", "response",
+        ],
+    },
+}
+
+
+class NGSComponentInput(BaseModel):
+    name: str
+    type: str = "character"          # "character" | "kinetic"
+    x_label: str                     # deficit state label
+    x_severity: float = 0.5         # 0.0 → 1.0
+    x_description: str = ""
+    y_label: str                     # resolution state label
+    y_completeness: float = 1.0     # 0.0 → 1.0
+    y_description: str = ""
+    description: str = ""
+    metadata: dict = {}
+
+
+class NGSValidateRequest(BaseModel):
+    axiom_label: str
+    axiom_law: str
+    axiom_keywords: list[str] = []
+    components: list[NGSComponentInput]
+    z_vector: list[float] = []       # probability vector for Z-axis context
+
+
+class NGSBuildRequest(BaseModel):
+    axiom_id: Optional[str] = None   # use a built-in axiom by id
+    axiom_label: Optional[str] = None
+    axiom_law: Optional[str] = None
+    axiom_question: str = ""
+    axiom_keywords: list[str] = []
+    components: list[NGSComponentInput]
+    z_vector: list[float] = []
+    z_direction: str = "both"        # "forward" | "backward" | "both"
+    z_invert: bool = False
+    z_intervene: bool = False
+    z_override_vector: list[float] = []
+
+
+@app.post("/api/v1/nebraska/validate")
+async def nebraska_validate(req: NGSValidateRequest):
+    """
+    Apply the 𝕍ᵧ gate to a list of components under a given Axiom.
+
+    Each component is scored for X→Y conversion lawfulness.
+    Components with 𝕍ᵧ = 0 are self-deleted; 𝕍ᵧ = 1 are retained.
+    """
+    result = quick_validate(
+        axiom_label=req.axiom_label,
+        axiom_law=req.axiom_law,
+        components_raw=[c.model_dump() for c in req.components],
+        keywords=req.axiom_keywords or None,
+        z_vector=req.z_vector or None,
+    )
+    return result
+
+
+@app.post("/api/v1/nebraska/build")
+async def nebraska_build(req: NGSBuildRequest):
+    """
+    Build a complete NGS system.
+
+    Resolves axiom (built-in or custom), constructs Z-axis temporal context,
+    validates all components via 𝕍ᵧ, and returns the fully assembled system
+    including story skeleton and coherence score.
+
+    Formula:  System = A + ∑[ (Cᵢ + Kᵢ) | A ] · 𝕍ᵧ
+    """
+    # ── Resolve Axiom ─────────────────────────────────────────────────────────
+    if req.axiom_id and req.axiom_id in _HORROR_AXIOMS:
+        a_data = _HORROR_AXIOMS[req.axiom_id]
+        axiom = Axiom(
+            label=a_data["label"],
+            law=a_data["law"],
+            question=a_data.get("question", ""),
+            domain=a_data.get("domain", "narrative"),
+            keywords=a_data.get("keywords", []),
+        )
+    elif req.axiom_label and req.axiom_law:
+        axiom = Axiom(
+            label=req.axiom_label,
+            law=req.axiom_law,
+            question=req.axiom_question,
+            keywords=req.axiom_keywords,
+        )
+    else:
+        raise HTTPException(
+            400,
+            "Provide either axiom_id (built-in) or both axiom_label + axiom_law.",
+        )
+
+    # ── Build system ──────────────────────────────────────────────────────────
+    ngs = NebraskaSystem(axiom)
+
+    # ── Z-axis context ────────────────────────────────────────────────────────
+    if req.z_vector or req.z_direction != "both" or req.z_invert:
+        direction_map = {
+            "forward":  AxisDirection.FORWARD,
+            "backward": AxisDirection.BACKWARD,
+            "both":     AxisDirection.BOTH,
+        }
+        direction = direction_map.get(req.z_direction, AxisDirection.BOTH)
+        z_ctx = ZContext(
+            chain_id=f"{axiom.label}_z_{uuid.uuid4().hex[:6]}",
+            direction=direction,
+            probability_vector=req.z_vector,
+        )
+        if req.z_invert:
+            z_ctx = z_ctx.invert()
+        if req.z_intervene and req.z_override_vector:
+            z_ctx = z_ctx.intervene(req.z_override_vector)
+        ngs.add_z_context(z_ctx)
+
+    # ── Add components ────────────────────────────────────────────────────────
+    for raw in req.components:
+        comp = Component(
+            name=raw.name,
+            component_type=ComponentType(raw.type),
+            x_state=XState(
+                label=raw.x_label,
+                description=raw.x_description,
+                severity=raw.x_severity,
+            ),
+            y_state=YState(
+                label=raw.y_label,
+                description=raw.y_description,
+                completeness=raw.y_completeness,
+            ),
+            description=raw.description,
+            metadata=raw.metadata,
+        )
+        ngs.add_component(comp)
+
+    result = ngs.build()
+    result["story"] = ngs.story()
+    return result
+
+
+@app.get("/api/v1/nebraska/axioms")
+async def nebraska_axioms():
+    """
+    List all built-in horror axioms available for NGS system construction.
+    """
+    return {
+        "axioms": [
+            {
+                "id":       axiom_id,
+                "label":    data["label"],
+                "law":      data["law"],
+                "question": data.get("question", ""),
+                "domain":   data.get("domain", "narrative"),
+                "keywords": data.get("keywords", []),
+            }
+            for axiom_id, data in _HORROR_AXIOMS.items()
+        ],
+        "formula": "System = A + ∑[ (Cᵢ + Kᵢ) | A ] · 𝕍ᵧ",
+        "gate":    "𝕍ᵧ(Component) = { 1 if (X→Y) under Law A, 0 otherwise }",
+        "z_axis":  "Temporal context — bidirectional logic chain traversal (forward + backward)",
     }
 
 
