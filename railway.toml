@@ -1,0 +1,5 @@
+[build]
+buildCommand = "pip install -r requirements_nebraska.txt"
+
+[deploy]
+startCommand = "uvicorn nebraska_3_0_api:app --host 0.0.0.0 --port $PORT"
