@@ -44,6 +44,12 @@ from nebraska_protocols import (
     RECURSIVE_LAW,
     qcs_certification,
 )
+from nebraska_2_0 import (
+    NebraskaEngine as _NebraskaEngine,
+    NebraskaAgentRunner,
+    HandshakeGenerator as _HandshakeGenerator,
+    _CLAUDE_AVAILABLE,
+)
 
 import numpy as np
 
@@ -1037,6 +1043,102 @@ async def nebraska_audit(session_id: str):
             "intervention":"Structure Veto — 'No is where structure lives'",
             "newton_qc":  "Final Invariant Checksum via QCS — story falls like gravity, every time",
         },
+    }
+
+
+# ─── Nebraska Agent (session-scoped) ─────────────────────────────────────────
+#
+# Shared NebraskaAgentRunner instance — same engine used by Nebraska 3.0 API.
+# Maps a Nightmare Engine session into a transient workspace dict so the
+# agent can read session state and propose components back into the narrative.
+
+_session_engine = _NebraskaEngine()
+_session_handshake = _HandshakeGenerator()
+_session_agent = NebraskaAgentRunner(_session_engine, _session_handshake)
+
+
+class SessionAgentRequest(BaseModel):
+    task: str
+    max_turns: int = 8
+
+
+@app.post("/api/v1/session/{session_id}/agent", summary="Run Nebraska Agent on a horror session")
+async def session_agent_run(session_id: str, req: SessionAgentRequest):
+    """
+    Run the Nebraska Agent against an active Nightmare Engine session.
+
+    The agent reads the session's governing Axiom, narrative history, and
+    current QCS state, then uses its 5 Nebraska tools to:
+      • Analyse and validate existing narrative components
+      • Generate new horror narrative candidates
+      • Check chain coherence via handshake validation
+      • Propose high-QCS components back into the session
+
+    The session is surfaced as a transient Nebraska workspace — components
+    proposed by the agent are written directly into the session chain.
+
+    Model: claude-opus-4-6 with adaptive thinking.
+    Requires: ANTHROPIC_API_KEY environment variable.
+    """
+    if session_id not in sessions:
+        raise HTTPException(404, "Session not found")
+    if not _CLAUDE_AVAILABLE:
+        raise HTTPException(503, "Anthropic SDK not available — set ANTHROPIC_API_KEY")
+
+    session = sessions[session_id]
+
+    # Build a transient Nebraska workspace from the session state
+    session_ws_id = f"session_{session_id}"
+    transient_workspace = {
+        "workspace_id": session_ws_id,
+        "domain": "story",
+        "premise": session.get("user_profile", {}).get("primary_fear", "unknown horror"),
+        "axiom": session.get("nebraska_axiom", DEFAULT_AXIOM),
+        "z_premise_valid": True,
+        "components": [],
+        "chain": [
+            {
+                "name": f"narrative_{i}",
+                "content_preview": text[:200],
+                "valid": True,
+                "qcs": 0.75,
+                "x": "",
+                "y": "",
+            }
+            for i, text in enumerate(session.get("narrative_history", []))
+        ],
+        "narrative_history": session.get("narrative_history", []),
+        "pending": [],
+        "qcs_scores": (
+            [session["nebraska_last_qc"]["mean_qcs"]]
+            if session.get("nebraska_last_qc") else []
+        ),
+        "audit_trail": [],
+    }
+    transient_workspaces = {session_ws_id: transient_workspace}
+
+    result = await _session_agent.run(
+        task=req.task,
+        workspace_id=session_ws_id,
+        axiom=session.get("nebraska_axiom", DEFAULT_AXIOM),
+        domain="story",
+        max_turns=req.max_turns,
+        workspaces=transient_workspaces,
+    )
+
+    # Sync any new components the agent proposed back into the session
+    for comp in transient_workspace.get("chain", []):
+        if comp.get("name", "").startswith("agent_"):
+            content = comp.get("content_preview", "")
+            if content and content not in session.get("narrative_history", []):
+                session.setdefault("narrative_history", []).append(content)
+                session["nebraska_valid_count"] = session.get("nebraska_valid_count", 0) + 1
+
+    return {
+        **result,
+        "session_id": session_id,
+        "axiom": session.get("nebraska_axiom", DEFAULT_AXIOM),
+        "agent_available": _CLAUDE_AVAILABLE,
     }
 
 

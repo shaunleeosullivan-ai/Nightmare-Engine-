@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nebraska 3.0 — Creative Suite</title>
+  <style>
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #12121a;
+      --card:     #1a1a26;
+      --border:   #2a2a3a;
+      --accent:   #6c63ff;
+      --accent2:  #ff6584;
+      --gold:     #f4c430;
+      --green:    #4ade80;
+      --red:      #f87171;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --font:     'Courier New', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    header h1 { font-size: 18px; color: var(--accent); letter-spacing: 2px; }
+    header .formula { color: var(--muted); font-size: 11px; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      gap: 0;
+      height: calc(100vh - 57px);
+    }
+
+    .panel {
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .panel:last-child { border-right: none; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+    }
+    .card-title {
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    /* ── Form elements ── */
+    select, input, textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    textarea { resize: vertical; min-height: 70px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary   { background: var(--accent);  color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-danger    { background: var(--red);      color: #fff; }
+    .btn-gold      { background: var(--gold);     color: #000; }
+    .btn-full { width: 100%; }
+
+    /* ── QCS badge ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+    .badge-platinum { background: #e5e4e2; color: #111; }
+    .badge-gold     { background: var(--gold); color: #111; }
+    .badge-silver   { background: #c0c0c0; color: #111; }
+    .badge-bronze   { background: #cd7f32; color: #fff; }
+    .badge-quarantine { background: var(--red); color: #fff; }
+    .badge-uncert   { background: var(--muted); color: #fff; }
+
+    /* ── Axiom bar ── */
+    .axiom-bar {
+      background: linear-gradient(135deg, #1a1025, #1a2530);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: .5px;
+    }
+
+    /* ── Chain component ── */
+    .component {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .component.rejected { border-left-color: var(--red); opacity: .7; }
+    .component-name { color: var(--muted); font-size: 10px; margin-bottom: 4px; }
+    .component-text { line-height: 1.5; margin-bottom: 6px; }
+    .component-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .component-xy { font-size: 10px; color: var(--muted); }
+    .component-xy span { color: var(--text); }
+
+    /* ── Agent chat ── */
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 200px;
+      max-height: 400px;
+      margin-bottom: 8px;
+      padding: 4px;
+    }
+    .msg {
+      border-radius: 4px;
+      padding: 8px 10px;
+      line-height: 1.5;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .msg-user   { background: #1e2030; border-left: 3px solid var(--accent2); }
+    .msg-agent  { background: #1a2520; border-left: 3px solid var(--green); }
+    .msg-system { background: #1a1525; border-left: 3px solid var(--muted); color: var(--muted); font-size: 10px; }
+    .msg-tool   { background: #151520; border-left: 3px solid var(--gold); color: var(--gold); font-size: 10px; }
+
+    /* ── Stats row ── */
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; }
+    .stat-label { font-size: 9px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+    .stat-value { font-size: 18px; font-weight: bold; color: var(--text); }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+    .tab { padding: 5px 12px; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 11px; border: 1px solid var(--border); background: var(--surface); }
+    .tab.active { background: var(--card); border-bottom-color: var(--card); color: var(--accent); }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--surface); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Spinner ── */
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Notification toast ── */
+    #toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--card); border: 1px solid var(--border);
+      padding: 10px 16px; border-radius: 6px;
+      font-size: 12px; opacity: 0; pointer-events: none;
+      transition: opacity .3s;
+      z-index: 9999;
+    }
+    #toast.show { opacity: 1; }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+
+    .ws-indicator {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--red); display: inline-block;
+    }
+    .ws-indicator.connected { background: var(--green); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>NEBRASKA 3.0</h1>
+    <div class="formula" id="header-formula">a/b = story → meaning → understanding</div>
+  </div>
+  <div style="margin-left:auto; display:flex; gap:12px; align-items:center;">
+    <span class="ws-indicator" id="ws-dot" title="WebSocket"></span>
+    <span id="ws-label" style="color:var(--muted);font-size:10px;">disconnected</span>
+    <span id="engine-badge" class="badge badge-uncert">ENGINE</span>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── LEFT PANEL: Workspace setup + stats ── -->
+  <div class="panel">
+
+    <div class="card">
+      <div class="card-title">API Endpoint</div>
+      <input id="api-url" value="http://localhost:8001" placeholder="http://localhost:8001" />
+    </div>
+
+    <div class="card">
+      <div class="card-title">New Workspace</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <select id="domain">
+          <option value="story">story</option>
+          <option value="strategy">strategy</option>
+          <option value="research">research</option>
+          <option value="design">design</option>
+          <option value="code">code</option>
+        </select>
+        <textarea id="premise" rows="3" placeholder="Enter your premise…"></textarea>
+        <input id="axiom-override" placeholder="Axiom override (optional)" />
+        <button class="btn btn-primary btn-full" onclick="createWorkspace()">CREATE WORKSPACE</button>
+      </div>
+    </div>
+
+    <div class="card" id="workspace-info" style="display:none;">
+      <div class="card-title">Active Workspace</div>
+      <div style="word-break:break-all;color:var(--muted);font-size:10px;" id="ws-id-display"></div>
+      <hr class="divider" style="margin:8px 0;" />
+      <div class="axiom-bar" id="axiom-display"></div>
+      <hr class="divider" style="margin:8px 0;" />
+      <div class="stats">
+        <div class="stat-box">
+          <div class="stat-label">Chain</div>
+          <div class="stat-value" id="stat-chain">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Mean QCS</div>
+          <div class="stat-value" id="stat-qcs">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Cert.</div>
+          <div class="stat-value" style="font-size:11px;" id="stat-cert">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Pending</div>
+          <div class="stat-value" id="stat-pending">0</div>
+        </div>
+      </div>
+      <hr class="divider" style="margin:8px 0;" />
+      <div class="row">
+        <button class="btn btn-secondary" onclick="refreshWorkspace()">↻ REFRESH</button>
+        <button class="btn btn-danger" onclick="closeWorkspace()">✕ CLOSE</button>
+      </div>
+    </div>
+
+    <div class="card" id="generate-card" style="display:none;">
+      <div class="card-title">AI Generation</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div class="row">
+          <div>
+            <div style="color:var(--muted);font-size:10px;margin-bottom:4px;">Count</div>
+            <input type="number" id="gen-count" value="3" min="1" max="10" style="width:100%;" />
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="generateComponents()" id="gen-btn">
+          ⚡ GENERATE
+        </button>
+      </div>
+    </div>
+
+    <div class="card" id="propose-card" style="display:none;">
+      <div class="card-title">Propose Component</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <textarea id="propose-text" rows="3" placeholder="Write your component…"></textarea>
+        <input id="propose-name" placeholder="Name (optional)" />
+        <button class="btn btn-secondary btn-full" onclick="proposeComponent()">PROPOSE →</button>
+      </div>
+    </div>
+
+    <div class="card" id="improve-card" style="display:none;">
+      <div class="card-title">Self-Improve</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input id="improve-target" placeholder="Component name (blank = lowest QCS)" />
+        <button class="btn btn-gold btn-full" onclick="improveComponent()">∇ IMPROVE</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── MIDDLE PANEL: Chain + Agent ── -->
+  <div class="panel" style="border-right:1px solid var(--border);">
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('chain', this)">CHAIN</div>
+      <div class="tab" onclick="switchTab('agent', this)">AGENT</div>
+      <div class="tab" onclick="switchTab('export', this)">EXPORT</div>
+    </div>
+
+    <!-- Chain tab -->
+    <div id="tab-chain">
+      <div id="chain-empty" style="color:var(--muted);text-align:center;padding:40px 0;">
+        Create a workspace to start building your chain.
+      </div>
+      <div id="chain-list"></div>
+    </div>
+
+    <!-- Agent tab -->
+    <div id="tab-agent" style="display:none;">
+      <div class="card">
+        <div class="card-title">Nebraska Agent — claude-opus-4-6 + adaptive thinking</div>
+        <div class="chat-history" id="chat-history"></div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <textarea id="agent-task" rows="3" placeholder="Give the agent a task…&#10;e.g. 'Build a 3-component horror chain around fear of the unknown'"></textarea>
+          <div class="row">
+            <div>
+              <div style="color:var(--muted);font-size:10px;margin-bottom:4px;">Max turns</div>
+              <input type="number" id="agent-turns" value="8" min="1" max="20" />
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+              <button class="btn btn-primary btn-full" onclick="runAgent()" id="agent-btn">▶ RUN AGENT</button>
+            </div>
+          </div>
+          <button class="btn btn-secondary btn-full" onclick="agentChat()">💬 CHAT (no workspace)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export tab -->
+    <div id="tab-export" style="display:none;">
+      <div class="card">
+        <div class="card-title">Export Validated Narrative</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="btn btn-primary btn-full" onclick="exportWorkspace()">⬇ EXPORT</button>
+          <button class="btn btn-secondary btn-full" onclick="viewAudit()">🔍 FULL AUDIT</button>
+          <button class="btn btn-secondary btn-full" onclick="viewProvenance()">📋 PROVENANCE</button>
+          <button class="btn btn-secondary btn-full" onclick="emergeAxioms()">✦ EMERGE AXIOMS</button>
+        </div>
+        <pre id="export-output" style="margin-top:12px;font-size:10px;color:var(--muted);white-space:pre-wrap;max-height:500px;overflow-y:auto;"></pre>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT PANEL: Validate + Handshake + Status ── -->
+  <div class="panel">
+
+    <div class="card">
+      <div class="card-title">Validate Component</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <textarea id="val-content" rows="3" placeholder="Content to validate…"></textarea>
+        <input id="val-axiom" placeholder="Axiom (blank = workspace axiom)" />
+        <input id="val-name" placeholder="Name (optional)" />
+        <button class="btn btn-secondary btn-full" onclick="validateComponent()">FOURFOLD TEST →</button>
+        <div id="val-result"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Handshake A.Y → B.X</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <textarea id="hs-a" rows="2" placeholder="Component A content…"></textarea>
+        <input id="hs-ya" placeholder="A.Y (resolution)" />
+        <textarea id="hs-b" rows="2" placeholder="Component B content…"></textarea>
+        <input id="hs-xb" placeholder="B.X (deficit)" />
+        <input id="hs-axiom" placeholder="Axiom" />
+        <button class="btn btn-secondary btn-full" onclick="handshake()">VALIDATE LINK →</button>
+        <div id="hs-result"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Engine Status</div>
+      <div id="engine-status" style="color:var(--muted);font-size:11px;">
+        Enter API URL and click refresh.
+      </div>
+      <button class="btn btn-secondary btn-full" style="margin-top:8px;" onclick="loadEngineStatus()">↻ STATUS</button>
+    </div>
+
+    <div class="card" id="emergent-card" style="display:none;">
+      <div class="card-title">Emergent Axioms</div>
+      <div id="emergent-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let workspaceId = null;
+let wsSocket = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const api = (path, opts = {}) => {
+  const base = document.getElementById('api-url').value.replace(/\/$/, '');
+  return fetch(`${base}${path}`, {
+    headers: {'Content-Type': 'application/json'},
+    ...opts,
+  });
+};
+
+const toast = (msg, dur = 2500) => {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+};
+
+const certClass = (c = '') => {
+  const m = {platinum:'platinum',gold:'gold',silver:'silver',bronze:'bronze'};
+  for (const [k,v] of Object.entries(m)) if (c.toLowerCase().includes(k)) return `badge-${v}`;
+  return c.toLowerCase().includes('quarantine') ? 'badge-quarantine' : 'badge-uncert';
+};
+
+const qcsColor = (q) => q >= .99 ? '#e5e4e2' : q >= .9 ? '#f4c430' : q >= .8 ? '#c0c0c0' : q >= .7 ? '#cd7f32' : '#f87171';
+
+const setLoading = (btnId, loading) => {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) btn.dataset.orig = btn.innerHTML;
+  btn.innerHTML = loading ? '<span class="spinner"></span> WORKING…' : btn.dataset.orig;
+};
+
+const switchTab = (name, el) => {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['chain','agent','export'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t === name ? '' : 'none';
+  });
+};
+
+// ── Workspace ─────────────────────────────────────────────────────────────────
+async function createWorkspace() {
+  const premise = document.getElementById('premise').value.trim();
+  if (!premise) { toast('Premise required'); return; }
+
+  try {
+    const res = await api('/v3/workspace/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        domain: document.getElementById('domain').value,
+        premise,
+        axiom: document.getElementById('axiom-override').value || undefined,
+        collaborator_id: 'web-ui',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    workspaceId = data.workspace_id;
+    toast(`Workspace created: ${workspaceId}`);
+    applyWorkspace(data);
+    connectWS();
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+function applyWorkspace(data) {
+  document.getElementById('workspace-info').style.display = '';
+  document.getElementById('generate-card').style.display  = '';
+  document.getElementById('propose-card').style.display   = '';
+  document.getElementById('improve-card').style.display   = '';
+
+  document.getElementById('ws-id-display').textContent = data.workspace_id || workspaceId;
+  document.getElementById('axiom-display').textContent  = data.axiom || '—';
+  document.getElementById('val-axiom').value = data.axiom || '';
+  document.getElementById('hs-axiom').value  = data.axiom || '';
+
+  updateStats(data);
+}
+
+function updateStats(data) {
+  document.getElementById('stat-chain').textContent   = data.chain_length ?? data.chain?.length ?? 0;
+  document.getElementById('stat-qcs').textContent     = data.mean_qcs != null ? data.mean_qcs.toFixed(3) : '—';
+  document.getElementById('stat-cert').textContent    = data.certification || '—';
+  document.getElementById('stat-pending').textContent = data.pending_count ?? 0;
+}
+
+async function refreshWorkspace() {
+  if (!workspaceId) return;
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}`);
+    const data = await res.json();
+    updateStats(data);
+    await renderChain();
+  } catch (e) { toast(`Refresh error: ${e.message}`); }
+}
+
+async function closeWorkspace() {
+  if (!workspaceId) return;
+  if (!confirm('Close this workspace? All unsaved state will be lost.')) return;
+  try {
+    await api(`/v3/workspace/${workspaceId}`, {method:'DELETE'});
+  } catch (_) {}
+  workspaceId = null;
+  if (wsSocket) { wsSocket.close(); wsSocket = null; }
+  document.getElementById('workspace-info').style.display = 'none';
+  document.getElementById('generate-card').style.display  = 'none';
+  document.getElementById('propose-card').style.display   = 'none';
+  document.getElementById('improve-card').style.display   = 'none';
+  document.getElementById('chain-list').innerHTML = '';
+  document.getElementById('chain-empty').style.display = '';
+  toast('Workspace closed');
+}
+
+// ── Chain rendering ───────────────────────────────────────────────────────────
+async function renderChain() {
+  if (!workspaceId) return;
+  const res  = await api(`/v3/workspace/${workspaceId}/chain`);
+  const data = await res.json();
+  const list = document.getElementById('chain-list');
+  const empty = document.getElementById('chain-empty');
+
+  if (!data.components || data.components.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = data.components.map((c, i) => {
+    const qcs  = c.qcs ?? 0;
+    const cert = c.certification || '';
+    return `
+    <div class="component${c.valid ? '' : ' rejected'}">
+      <div class="component-name">#${i+1} · ${escHtml(c.name || '')} · <span style="color:${qcsColor(qcs)}">QCS ${qcs.toFixed ? qcs.toFixed(3) : qcs}</span>
+        <span class="badge ${certClass(cert)}" style="margin-left:4px;">${cert || '?'}</span>
+      </div>
+      <div class="component-text">${escHtml(c.content_preview || '')}</div>
+      <div class="component-meta">
+        <div class="component-xy">X: <span>${escHtml(c.x||'—')}</span></div>
+        <div class="component-xy">Y: <span>${escHtml(c.y||'—')}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Update chain stats
+  if (data.chain_validation) {
+    const cv = data.chain_validation;
+    const chainNote = document.createElement('div');
+    chainNote.style.cssText = 'font-size:10px;color:var(--muted);text-align:right;padding:4px;';
+    chainNote.textContent = `Chain: ${cv.valid ? '✓ valid' : '✗ broken'} · Strength ${(cv.chain_strength||0).toFixed(3)}`;
+    list.appendChild(chainNote);
+  }
+}
+
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+async function generateComponents() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  setLoading('gen-btn', true);
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}/generate`, {
+      method: 'POST',
+      body: JSON.stringify({count: parseInt(document.getElementById('gen-count').value) || 3}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    toast(`Generated: ${data.survivors_count} survivors · ${data.certification || ''}`);
+    updateStats({chain_length: data.chain_length, mean_qcs: data.mean_qcs, certification: data.certification});
+    await renderChain();
+  } catch (e) { toast(`Error: ${e.message}`); }
+  finally { setLoading('gen-btn', false); }
+}
+
+// ── Propose ───────────────────────────────────────────────────────────────────
+async function proposeComponent() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  const content = document.getElementById('propose-text').value.trim();
+  if (!content) { toast('Content required'); return; }
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}/propose`, {
+      method: 'POST',
+      body: JSON.stringify({content, name: document.getElementById('propose-name').value || undefined}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    toast(`${data.status === 'accepted' ? '✓ Accepted' : '✗ Rejected'} · QCS ${data.qcs}`);
+    if (data.status === 'accepted') {
+      document.getElementById('propose-text').value = '';
+      await renderChain();
+    }
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+// ── Improve ───────────────────────────────────────────────────────────────────
+async function improveComponent() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}/improve`, {
+      method: 'POST',
+      body: JSON.stringify({target_component: document.getElementById('improve-target').value || undefined}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    const improved = data.improved ? '↑ improved' : '= unchanged';
+    toast(`${data.target_removed} → ${improved} · new QCS ${data.replacement?.qcs ?? '?'}`);
+    await renderChain();
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+// ── Agent ─────────────────────────────────────────────────────────────────────
+function addMsg(cls, text) {
+  const chat = document.getElementById('chat-history');
+  const el = document.createElement('div');
+  el.className = `msg msg-${cls}`;
+  el.textContent = text;
+  chat.appendChild(el);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function runAgent() {
+  if (!workspaceId) { toast('No active workspace — create one first'); return; }
+  const task = document.getElementById('agent-task').value.trim();
+  if (!task) { toast('Task required'); return; }
+  setLoading('agent-btn', true);
+  addMsg('user', `▶ ${task}`);
+  try {
+    const res = await api(`/v3/agent/run/${workspaceId}`, {
+      method: 'POST',
+      body: JSON.stringify({task, max_turns: parseInt(document.getElementById('agent-turns').value) || 8}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+    if (data.tool_calls?.length) {
+      data.tool_calls.forEach(tc => addMsg('tool', `⚙ ${tc.tool} (turn ${tc.turn}): ${tc.result_preview}`));
+    }
+    addMsg('agent', data.final_response || '(no text response)');
+    addMsg('system', `turns: ${data.turns} · tool calls: ${data.tool_calls_count} · stop: ${data.stop_reason}`);
+
+    await renderChain();
+    await refreshWorkspace();
+  } catch (e) {
+    addMsg('system', `Error: ${e.message}`);
+  }
+  finally { setLoading('agent-btn', false); }
+}
+
+async function agentChat() {
+  const task = document.getElementById('agent-task').value.trim();
+  if (!task) { toast('Task required'); return; }
+  const axiom = document.getElementById('val-axiom').value;
+  addMsg('user', `💬 ${task}`);
+  try {
+    const res = await api('/v3/agent/chat', {
+      method: 'POST',
+      body: JSON.stringify({task, axiom: axiom || undefined, max_turns: parseInt(document.getElementById('agent-turns').value) || 8}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+    if (data.tool_calls?.length) {
+      data.tool_calls.forEach(tc => addMsg('tool', `⚙ ${tc.tool}: ${tc.result_preview}`));
+    }
+    addMsg('agent', data.final_response || '(no text response)');
+  } catch (e) { addMsg('system', `Error: ${e.message}`); }
+}
+
+// ── Validate ──────────────────────────────────────────────────────────────────
+async function validateComponent() {
+  const content = document.getElementById('val-content').value.trim();
+  const axiom   = document.getElementById('val-axiom').value.trim();
+  if (!content || !axiom) { toast('Content and Axiom required'); return; }
+  try {
+    const res = await api('/v3/component/validate', {
+      method: 'POST',
+      body: JSON.stringify({content, axiom, name: document.getElementById('val-name').value || 'input'}),
+    });
+    const d = await res.json();
+    const qcs = d.qcs ?? 0;
+    document.getElementById('val-result').innerHTML = `
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:4px;font-size:11px;">
+        <span class="badge ${certClass(d.certification)}">${d.certification || '?'}</span>
+        <span style="color:${qcsColor(qcs)};margin-left:6px;">QCS ${qcs.toFixed(3)}</span>
+        <div style="color:var(--muted);margin-top:4px;">vy=${d.component?.vy ?? '?'} · y2=${d.component?.y2_pass ? '✓' : '✗'}</div>
+        ${d.component?.rejection_reason ? `<div style="color:var(--red);margin-top:2px;">${escHtml(d.component.rejection_reason)}</div>` : ''}
+        ${d.governor_veto ? '<div style="color:var(--red);">⚠ GOVERNOR VETO</div>' : ''}
+      </div>`;
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+// ── Handshake ─────────────────────────────────────────────────────────────────
+async function handshake() {
+  const body = {
+    content_a: document.getElementById('hs-a').value,
+    y_a: document.getElementById('hs-ya').value,
+    content_b: document.getElementById('hs-b').value,
+    x_b: document.getElementById('hs-xb').value,
+    axiom: document.getElementById('hs-axiom').value,
+    name_a: 'A', name_b: 'B',
+  };
+  if (!body.content_a || !body.content_b || !body.axiom) { toast('Fill A, B, and Axiom'); return; }
+  try {
+    const res = await api('/v3/handshake', {method:'POST', body: JSON.stringify(body)});
+    const d = await res.json();
+    document.getElementById('hs-result').innerHTML = `
+      <div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:4px;font-size:11px;">
+        <span style="color:${d.valid ? 'var(--green)' : 'var(--red)'};">${d.valid ? '✓ VALID LINK' : '✗ BROKEN LINK'}</span>
+        <span style="color:var(--muted);margin-left:8px;">strength ${d.causal_strength?.toFixed(3)}</span>
+        <div style="color:var(--muted);margin-top:4px;font-size:10px;">${escHtml(d.proof || '')}</div>
+      </div>`;
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+async function exportWorkspace() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}/export`);
+    const d = await res.json();
+    document.getElementById('export-output').textContent = JSON.stringify(d, null, 2);
+    toast('Exported');
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+async function viewAudit() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}/audit`);
+    const d = await res.json();
+    document.getElementById('export-output').textContent = JSON.stringify(d, null, 2);
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+async function viewProvenance() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  try {
+    const res = await api(`/v3/workspace/${workspaceId}/provenance`);
+    const d = await res.json();
+    document.getElementById('export-output').textContent = JSON.stringify(d, null, 2);
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+async function emergeAxioms() {
+  if (!workspaceId) { toast('No active workspace'); return; }
+  try {
+    const res = await api('/v3/axiom/emerge', {method:'POST', body: JSON.stringify({workspace_id: workspaceId})});
+    const d = await res.json();
+    const card = document.getElementById('emergent-card');
+    const list = document.getElementById('emergent-list');
+    card.style.display = '';
+    list.innerHTML = (d.emergent_axioms || []).map(a =>
+      `<div class="axiom-bar" style="margin-bottom:6px;font-size:11px;">${escHtml(a)}</div>`
+    ).join('') || '<div style="color:var(--muted);">No emergent axioms yet.</div>';
+    document.getElementById('export-output').textContent = JSON.stringify(d, null, 2);
+  } catch (e) { toast(`Error: ${e.message}`); }
+}
+
+// ── Engine status ─────────────────────────────────────────────────────────────
+async function loadEngineStatus() {
+  try {
+    const res = await api('/v3/engine/status');
+    const d = await res.json();
+    const sub = d.primary_substrate || {};
+    document.getElementById('engine-status').innerHTML = `
+      <div>Model: <span style="color:var(--accent);">${sub.model || '?'}</span></div>
+      <div>Thinking: ${sub.thinking || '?'}</div>
+      <div>Committed: ${d.committed_count} · Quarantined: ${d.quarantined_count}</div>
+      <div style="margin-top:6px;color:var(--muted);font-size:10px;">
+        ${(d.prime_directives || []).map(p => `• ${p}`).join('<br>')}
+      </div>`;
+    const cert = d.certifications || {};
+    document.getElementById('engine-badge').textContent = 'ENGINE OK';
+    document.getElementById('engine-badge').className = 'badge badge-gold';
+  } catch (e) {
+    document.getElementById('engine-status').textContent = `Unreachable: ${e.message}`;
+  }
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  if (!workspaceId) return;
+  if (wsSocket) wsSocket.close();
+  const base = document.getElementById('api-url').value.replace(/^http/, 'ws').replace(/\/$/, '');
+  wsSocket = new WebSocket(`${base}/v3/stream/${workspaceId}`);
+
+  wsSocket.onopen = () => {
+    document.getElementById('ws-dot').className = 'ws-indicator connected';
+    document.getElementById('ws-label').textContent = 'live';
+  };
+  wsSocket.onclose = () => {
+    document.getElementById('ws-dot').className = 'ws-indicator';
+    document.getElementById('ws-label').textContent = 'disconnected';
+  };
+  wsSocket.onmessage = async (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.event === 'components_generated' || msg.event === 'component_proposed') {
+      await renderChain();
+      if (msg.mean_qcs != null) updateStats({mean_qcs: msg.mean_qcs, certification: msg.certification});
+    }
+    if (msg.event === 'agent_run') {
+      addMsg('system', `Agent run complete: ${msg.tool_calls_count} tools, ${msg.turns} turns`);
+    }
+  };
+  wsSocket.onerror = () => toast('WebSocket error');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  loadEngineStatus();
+});
+</script>
+</body>
+</html>
