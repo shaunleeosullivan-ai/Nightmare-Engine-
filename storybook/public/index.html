@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Animated Storybook</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=Playfair+Display:ital,wght@0,700;1,700&family=Cormorant+Garamond:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ── Floating dust particles ───────────────────────────────────────────── -->
+<canvas id="particles"></canvas>
+
+<!-- ── Warm lamp glow ────────────────────────────────────────────────────── -->
+<div class="lamp-glow"></div>
+
+<!-- ── Upload Overlay ────────────────────────────────────────────────────── -->
+<div id="upload-overlay">
+  <div class="upload-card">
+    <div class="upload-ornament">✦</div>
+    <h1>The Animated Storybook</h1>
+    <p class="tagline">Upload your text and watch it come alive…</p>
+
+    <div class="upload-zone" id="upload-zone">
+      <div class="upload-icon">📜</div>
+      <p>Drag &amp; drop a <strong>.txt</strong> file here</p>
+      <p class="upload-sub">or <label for="file-input" class="file-label">click to browse</label></p>
+      <input type="file" id="file-input" accept=".txt,.md,.rtf" />
+    </div>
+
+    <div class="divider"><span>— or paste your text below —</span></div>
+
+    <textarea
+      id="text-input"
+      placeholder="Paste any block of text here — a story, a poem, a speech, an excerpt — and I shall read it to you…"
+    ></textarea>
+
+    <div class="char-count" id="char-count">0 characters</div>
+
+    <button id="start-btn" disabled>
+      <span class="btn-ornament">✦</span>
+      Open the Book
+      <span class="btn-ornament">✦</span>
+    </button>
+    <p class="start-hint" id="start-hint">Add some text above to begin</p>
+  </div>
+</div>
+
+<!-- ── Main Scene ─────────────────────────────────────────────────────────── -->
+<div class="scene" id="scene">
+
+  <!-- Book container -->
+  <div class="book-wrapper" id="book-wrapper">
+
+    <!-- Closed book (shown initially) -->
+    <div class="book-closed" id="book-closed">
+      <div class="cover-spine"></div>
+      <div class="cover-front">
+        <div class="cover-border"></div>
+        <div class="cover-title-block">
+          <div class="cover-ornament-top">✦ ✦ ✦</div>
+          <div class="cover-title-text" id="cover-title-text">Your Story</div>
+          <div class="cover-ornament-bottom">✦</div>
+        </div>
+        <div class="cover-bottom-dec">— A Story —</div>
+      </div>
+    </div>
+
+    <!-- Open book spread (hidden until story starts) -->
+    <div class="book-spread" id="book-spread">
+
+      <!-- Left page -->
+      <div class="page page-left" id="page-left">
+        <div class="page-shadow-inner-left"></div>
+        <div class="page-inner">
+          <div class="page-content" id="left-content">
+            <div class="page-content-inner"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Centre spine -->
+      <div class="book-spine">
+        <div class="spine-ridge"></div>
+        <div class="spine-ridge"></div>
+        <div class="spine-ridge"></div>
+      </div>
+
+      <!-- Right page -->
+      <div class="page page-right" id="page-right">
+        <div class="page-shadow-inner-right"></div>
+        <div class="page-inner">
+          <div class="page-content" id="right-content">
+            <div class="page-content-inner"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flip page (animates on page turn) -->
+      <div class="flip-wrapper" id="flip-wrapper">
+        <div class="flip-face flip-front">
+          <div class="page-shadow-inner-right"></div>
+          <div class="page-inner">
+            <div class="page-content" id="flip-front-content"></div>
+          </div>
+        </div>
+        <div class="flip-face flip-back">
+          <div class="page-shadow-inner-left"></div>
+          <div class="page-inner">
+            <div class="page-content" id="flip-back-content"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /book-spread -->
+
+  </div><!-- /book-wrapper -->
+
+  <!-- Controls bar -->
+  <div class="controls-bar" id="controls-bar">
+    <button class="ctrl-btn" id="pause-btn" title="Pause / Resume narration">
+      <span id="pause-icon">⏸</span> <span id="pause-label">Pause</span>
+    </button>
+
+    <div class="ctrl-group">
+      <label class="ctrl-label">Speed</label>
+      <input type="range" id="speed-slider" min="0.5" max="1.8" step="0.1" value="0.9" />
+      <span class="ctrl-value" id="speed-label">0.9×</span>
+    </div>
+
+    <div class="ctrl-group">
+      <label class="ctrl-label">Volume</label>
+      <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" />
+    </div>
+
+    <div class="ctrl-progress">
+      <span class="page-indicator" id="page-indicator">Page 1</span>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Narrator speech indicator -->
+  <div class="narrator-indicator" id="narrator-indicator">
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+  </div>
+
+</div><!-- /scene -->
+
+<!-- Narrator commentary bubble -->
+<div class="narrator-bubble" id="narrator-bubble">
+  <div class="bubble-avatar">📖</div>
+  <div class="bubble-text" id="bubble-text"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
