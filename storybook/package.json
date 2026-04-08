@@ -1,0 +1,18 @@
+{
+  "name": "animated-storybook-narrator",
+  "version": "1.0.0",
+  "description": "An animated leather-bound storybook with AI storyteller narrator",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
