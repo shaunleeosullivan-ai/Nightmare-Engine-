@@ -204,6 +204,113 @@
       background: var(--crimson);
       box-shadow: 0 0 6px var(--crimson);
     }
+
+    /* ── Cosmological panel (Cosmilogica Protocolium) ── */
+    #cosmo-panel {
+      flex-shrink: 0;
+      border: 1px solid #1a0011;
+      background: #02000a;
+      padding: 7px 12px;
+      font-size: 0.78em;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 22px;
+      align-items: center;
+    }
+    #cosmo-panel .cosmo-label {
+      color: #440033;
+      font-size: 0.85em;
+      letter-spacing: 0.08em;
+    }
+    #cosmo-panel .cosmo-val {
+      color: #cc44aa;
+      transition: color 0.5s;
+    }
+    #cosmo-panel .cosmo-val.null { color: #332233; }
+    #cosmo-panel .cosmo-val.active { color: #ff88dd; }
+
+    /* Horror gradient micro-bar */
+    #horror-track {
+      width: 80px;
+      height: 6px;
+      background: #100010;
+      border: 1px solid #330033;
+      border-radius: 1px;
+      overflow: hidden;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    #horror-fill {
+      height: 100%;
+      background: #aa00cc;
+      width: 0%;
+      transition: width 2s ease, background 1s ease;
+    }
+
+    /* Entropy micro-bar */
+    #entropy-track {
+      width: 60px;
+      height: 6px;
+      background: #100010;
+      border: 1px solid #330033;
+      border-radius: 1px;
+      overflow: hidden;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    #entropy-fill {
+      height: 100%;
+      background: #6600aa;
+      width: 0%;
+      transition: width 2s ease;
+    }
+
+    /* Axiom display */
+    #cosmo-axiom {
+      font-style: italic;
+      color: #553366;
+      font-size: 0.8em;
+      flex-basis: 100%;
+      border-top: 1px solid #1a0011;
+      padding-top: 4px;
+      margin-top: 2px;
+    }
+    #cosmo-axiom .axiom-text { color: #7744aa; }
+
+    /* ── Nebraska 2.0 checksum row ── */
+    #nebraska-panel {
+      flex-shrink: 0;
+      border: 1px solid #001a0e;
+      background: #00060a;
+      padding: 5px 12px;
+      font-size: 0.76em;
+      display: flex;
+      align-items: center;
+      gap: 8px 16px;
+      flex-wrap: wrap;
+    }
+    .nb-label { color: #003322; font-size: 0.85em; letter-spacing: 0.06em; }
+    .nb-val   { color: #00cc88; transition: color 0.4s; font-variant-numeric: tabular-nums; }
+    .nb-coherent {
+      font-weight: bold;
+      font-size: 0.82em;
+      padding: 1px 6px;
+      border-radius: 2px;
+      transition: background 0.5s, color 0.5s;
+    }
+    .nb-coherent.ok   { background: #001a0e; color: #00ff88; }
+    .nb-coherent.fail { background: #1a0000; color: #ff4444; animation: pulse-glow 1s infinite alternate; }
+    .nb-coherent.init { background: #0a0a0a; color: #336655; }
+
+    .nb-laws { display: flex; gap: 4px; }
+    .nb-laws span {
+      width: 16px; height: 16px; line-height: 16px; text-align: center;
+      border-radius: 2px; font-size: 0.8em; font-weight: bold;
+      background: #001a0e; color: #003322;
+      transition: background 0.4s, color 0.4s;
+    }
+    .nb-laws span.pass { background: #004422; color: #00cc88; }
+    .nb-laws span.fail { background: #220000; color: #cc2200; }
   </style>
 </head>
 <body>
@@ -247,6 +354,61 @@
 
 <div id="emotion-badge">Emotion: NEUTRAL</div>
 
+<!-- ── Cosmological State Panel (Cosmilogica Protocolium) ───────────────── -->
+<div id="cosmo-panel">
+  <span class="cosmo-label">NULL STATE:</span>
+  <span class="cosmo-val null" id="c-null">TRUE</span>
+
+  <span class="cosmo-label">HORROR ∇:</span>
+  <span>
+    <div id="horror-track"><div id="horror-fill"></div></div>
+    <span class="cosmo-val" id="c-horror">0.000</span>
+  </span>
+
+  <span class="cosmo-label">ENTROPY:</span>
+  <span>
+    <div id="entropy-track"><div id="entropy-fill"></div></div>
+    <span class="cosmo-val" id="c-entropy">0.000</span>
+  </span>
+
+  <span class="cosmo-label">SANITY:</span>
+  <span class="cosmo-val" id="c-sanity">1.000</span>
+
+  <span class="cosmo-label">X→Y:</span>
+  <span class="cosmo-val" id="c-conv">0</span>
+
+  <span class="cosmo-label">AUTOGENESIS:</span>
+  <span class="cosmo-val" id="c-auto">∅</span>
+
+  <span id="cosmo-axiom">
+    AXIOM: <span class="axiom-text" id="c-axiom">Existence requires contrast to manifest</span>
+  </span>
+</div>
+
+<!-- ── Nebraska 2.0 Checksum Row ──────────────────────────────────────── -->
+<div id="nebraska-panel">
+  <span class="nb-label">NB2.0</span>
+  <span class="nb-label">CHECKSUM:</span>
+  <span class="nb-val" id="nb-checksum">—</span>
+  <span class="nb-coherent" id="nb-coherent">INITIALIZING</span>
+
+  <span class="nb-label">∇:</span>
+  <span class="nb-val" id="nb-gradient">—</span>
+
+  <span class="nb-label">M(t):</span>
+  <span class="nb-val" id="nb-memory">—</span>
+
+  <span class="nb-label">LAWS:</span>
+  <span class="nb-laws" id="nb-laws">
+    <span id="nb-law-t" title="Transmission: Meaning × Understanding">T</span>
+    <span id="nb-law-r" title="Recursion: ∇ ≥ 1">R</span>
+    <span id="nb-law-b" title="Bidirectional: T(z) × T(1/z) ≥ 1">B</span>
+  </span>
+
+  <span class="nb-label">COMPONENTS:</span>
+  <span class="nb-val" id="nb-components">0</span>
+</div>
+
 <div id="recursion-dots">
   <div class="rdot" id="rd1"></div>
   <div class="rdot" id="rd2"></div>
@@ -274,6 +436,7 @@
   let expId       = null;
   let ambientSound = null;
   let currentIntensity = 0;
+  let cosmoState  = { null_state: true, autogenesis_cycles: 0 };
 
   // ── Emotion colours ───────────────────────────────────────────────────────
   const EMOTION_COLORS = {
@@ -448,6 +611,112 @@
       setIntensity(0.2);
       setRecursion(1);
       stopAmbient();
+    }
+
+    // Cosmological update (Cosmilogica Protocolium)
+    if (data.cosmology_update) {
+      updateCosmology(data.cosmology_update);
+    }
+
+    // Nebraska 2.0 checksum update
+    if (data.nebraska_update) {
+      updateNebraska(data.nebraska_update);
+    }
+  }
+
+  // ── Cosmological state renderer ───────────────────────────────────────────
+  function updateCosmology(c) {
+    cosmoState = { ...cosmoState, ...c };
+
+    // Null state indicator
+    const nullEl = document.getElementById('c-null');
+    if (c.null_state != null) {
+      nullEl.textContent = c.null_state ? 'TRUE' : 'FALSE';
+      nullEl.className = 'cosmo-val ' + (c.null_state ? 'null' : 'active');
+    }
+
+    // Horror gradient
+    if (c.horror_gradient != null) {
+      const pct = Math.round(c.horror_gradient * 100);
+      document.getElementById('horror-fill').style.width = pct + '%';
+      const hue = Math.round(280 - c.horror_gradient * 80);   // purple → magenta
+      document.getElementById('horror-fill').style.background = `hsl(${hue},100%,45%)`;
+      document.getElementById('c-horror').textContent = c.horror_gradient.toFixed(3);
+    }
+
+    // Narrative entropy
+    if (c.narrative_entropy != null) {
+      const epct = Math.round(c.narrative_entropy * 100);
+      document.getElementById('entropy-fill').style.width = epct + '%';
+      document.getElementById('c-entropy').textContent = c.narrative_entropy.toFixed(3);
+    }
+
+    // Sanity coefficient
+    if (c.sanity_coefficient != null) {
+      const sanEl = document.getElementById('c-sanity');
+      sanEl.textContent = c.sanity_coefficient.toFixed(3);
+      sanEl.style.color = c.sanity_coefficient < 0.3 ? '#ff2244' :
+                          c.sanity_coefficient < 0.6 ? '#cc44aa' : '#7744aa';
+    }
+
+    // X→Y conversion count
+    if (c.total_conversions != null) {
+      document.getElementById('c-conv').textContent = c.total_conversions;
+    }
+
+    // Autogenesis cycles
+    if (c.autogenesis_cycles != null) {
+      const autoEl = document.getElementById('c-auto');
+      autoEl.textContent = c.autogenesis_cycles === 0 ? '∅' : `×${c.autogenesis_cycles}`;
+      autoEl.className = 'cosmo-val ' + (c.autogenesis_cycles > 0 ? 'active' : 'null');
+    }
+
+    // Governing axiom
+    if (c.governing_axiom) {
+      document.getElementById('c-axiom').textContent = c.governing_axiom;
+    }
+  }
+
+  // ── Nebraska 2.0 checksum renderer ───────────────────────────────────────
+  function updateNebraska(n) {
+    // Checksum value
+    if (n.checksum != null) {
+      document.getElementById('nb-checksum').textContent = n.checksum.toFixed(4);
+    }
+
+    // Coherence indicator
+    const cohEl = document.getElementById('nb-coherent');
+    if (n.checksum_coherent != null) {
+      cohEl.textContent = n.checksum_coherent ? 'COHERENT' : 'DIVERGED';
+      cohEl.className = 'nb-coherent ' + (n.checksum_coherent ? 'ok' : 'fail');
+    }
+
+    // Learning gradient ∇
+    if (n.learning_gradient != null) {
+      const gEl = document.getElementById('nb-gradient');
+      gEl.textContent = n.learning_gradient.toFixed(3);
+      gEl.style.color = n.learning_gradient >= 1.0 ? '#00cc88' : '#ff8800';
+    }
+
+    // Memory consistency M(t)
+    if (n.memory_consistency != null) {
+      document.getElementById('nb-memory').textContent = n.memory_consistency.toFixed(3);
+    }
+
+    // Three Laws status dots
+    if (n.laws) {
+      const setLaw = (id, passing) => {
+        const el = document.getElementById(id);
+        if (el) el.className = passing ? 'pass' : 'fail';
+      };
+      setLaw('nb-law-t', n.laws.transmission);
+      setLaw('nb-law-r', n.laws.recursion);
+      setLaw('nb-law-b', n.laws.bidirectional);
+    }
+
+    // Component count
+    if (n.components_registered != null) {
+      document.getElementById('nb-components').textContent = n.components_registered;
     }
   }
 
